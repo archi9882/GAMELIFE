@@ -257,6 +257,51 @@ export function createPlumberScene(host: HTMLElement): SceneHandle | null {
   owner.p.root.visible = false;
   apprentice.p.root.visible = false;
 
+  // 浮動名牌：把 3D 座標投影到畫面，用 HTML 呈現（文字清楚、可換字型）
+  const overlay = document.createElement("div");
+  overlay.className = "stage-tags";
+  host.appendChild(overlay);
+  interface Tag {
+    el: HTMLElement;
+    anchor: () => Vector3;
+    shown: () => boolean;
+  }
+  const tags: Tag[] = [];
+  const addTag = (text: string, cls: string, anchor: () => Vector3, shown: () => boolean = () => true): void => {
+    const el = document.createElement("span");
+    el.className = `tag3d ${cls}`;
+    el.textContent = text;
+    overlay.appendChild(el);
+    tags.push({ el, anchor, shown });
+  };
+  const above = (w: Walker, h: number) => (): Vector3 => w.p.root.position.clone().add(new Vector3(0, h + w.p.body.position.y, 0));
+  addTag("你｜水電工", "me", above(player, 2.55));
+  addTag("阿凱｜學徒", "mate", above(apprentice, 2.55), () => apprentice.p.root.visible);
+  addTag("屋主", "owner", above(owner, 2.4), () => owner.p.root.visible);
+  const fixed = (x: number, y: number, z: number) => (): Vector3 => new Vector3(x, y, z);
+  addTag("材料行", "place", fixed(-8.5, 3.9, -1));
+  addTag("貨車", "place", fixed(-6.8, 2.7, 5.3));
+  addTag("浴室", "place", fixed(6.4, 3.0, -4.6));
+  addTag("天花板夾層", "place", fixed(1.2, 4.0, -3.8));
+  const placeTags = (): void => {
+    const w = size.w;
+    const h = size.h;
+    const placed: { x: number; y: number; hw: number }[] = [];
+    for (const t of tags) {
+      const v = t.anchor().project(camera);
+      const x = (v.x * 0.5 + 0.5) * w;
+      let y = (-v.y * 0.5 + 0.5) * h;
+      const on = t.shown() && v.z < 1 && x > -40 && x < w + 40 && y > -20 && y < h + 20;
+      t.el.style.display = on ? "" : "none";
+      if (!on) continue;
+      // 名牌互相重疊時，後面的往上疊（tags 依重要性排序：玩家先）
+      const hw = t.el.offsetWidth / 2;
+      while (placed.some((p) => Math.abs(p.x - x) < p.hw + hw && Math.abs(p.y - y) < 18)) y -= 18;
+      placed.push({ x, y, hw });
+      t.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
+    }
+  };
+
   let current: Place | null = null;
   let active = true;
   let progress = 0;
@@ -327,6 +372,7 @@ export function createPlumberScene(host: HTMLElement): SceneHandle | null {
     sun.intensity = sunNow.intensity;
     renderer.setClearColor(skyNow);
     renderer.render(scene, camera);
+    placeTags();
   };
   raf = requestAnimationFrame(frame);
 
@@ -369,6 +415,7 @@ export function createPlumberScene(host: HTMLElement): SceneHandle | null {
       ro.disconnect();
       renderer.dispose();
       renderer.domElement.remove();
+      overlay.remove();
     },
   };
 }

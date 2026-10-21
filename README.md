@@ -19,6 +19,7 @@ npm run build      # 產出 dist/，並另外產出單檔 dist/career-day.html
 | `src/scene/` | three.js 方塊風 3D 場景（目前僅水電工），由 `locations` 與事件的 `location` 驅動 |
 | `src/ui/` | 畫面、Canvas 結算卡、localStorage（失敗也能玩） |
 | `tests/` | 格式驗證、窮舉所有選擇路線的可達性測試 |
+| `docs/BACKLOG.md` | 待辦清單 |
 | `research/` | 各職業來源查證紀錄與待查清單 |
 
 ## 資料與誠信

@@ -71,7 +71,9 @@ function termsIn(texts: string[], career: Career): GlossaryTerm[] {
 
 function glossHtml(terms: GlossaryTerm[]): string {
   if (!terms.length) return "";
-  return `<details class="gloss"><summary>名詞解釋（${terms.length}）</summary>
+  const hint = hintShown ? "" : `<p class="gloss-hint">有虛線的詞可以點，會展開白話解釋。</p>`;
+  hintShown = true;
+  return `${hint}<details class="gloss"><summary>名詞解釋（${terms.length}）</summary>
     <div class="gloss-list">${terms
       .map(
         (t) => `<details class="gloss-item" data-term="${esc(t.term)}"><summary>${esc(t.term)}</summary><p>${esc(t.meaning)}</p></details>`,
@@ -94,6 +96,7 @@ function bindTerms(): void {
   );
 }
 
+let hintShown = false;
 let root: HTMLElement;
 let stageEl: HTMLElement;
 let stageHost: HTMLElement;
