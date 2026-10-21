@@ -29,12 +29,33 @@
 
 OECD 平均（全學段）：總工時 38.8、教學 20.6、備課 6.5、批改 4.2（TALIS 2018 Vol. I，p. 70）。
 
-### 為什麼還不能寫進遊戲
-1. **學段不符**：以上是**國中**。高中職（upper secondary）才是遊戲的對象；同一份報告指出臺灣是少數「高中老師教學時數比國中多、總工時也較長」的系統，所以不能拿國中數字代替。高中職的表是 Table I.2.29，只在線上附錄。
-2. **缺項**：親師溝通、同儕協作、學生輔導、校務會議、課外活動的時數都在線上附錄的 Table I.2.27／I.2.29，這份報告沒有收錄。沒有這些就無法拆成遊戲的五類（核心／溝通／行政／零碎／學習）。
-3. 用上面的數字硬湊會互相矛盾（教學＋備課＋批改已接近總工時，卻還要容納「超過 4 小時」的行政），不採用。
+### 高中職（upper secondary）完整數字：已取得
+`doi.org` 與 `statlinks.oecdcode.org` 開放後，下載 TALIS 2018 Vol. I 第 2 章的 StatLink Excel（`https://doi.org/10.1787/888933933045`），工作表 **Table I.2.29**「Upper secondary teachers' working hours」，Chinese Taipei 一列（平均值，單位：60 分鐘小時／週）：
 
-### 下一步
-- 需要開放 `doi.org`（以及可能的 `stat.link`），才能下載 Vol. I 第 2 章的 StatLink Excel（`https://doi.org/10.1787/888933933045`），裡面應有 Table I.2.29（高中職）。
-- 取得後再決定五類換算方式，並比照軟體工程師寫成測試。
-- 在那之前，老師的比例維持推估（fiction）。
+| 任務 | 小時 | 本專案歸類 |
+|---|---|---|
+| Teaching | 18.70 | core |
+| Marking/correcting student work | 3.95 | core |
+| Engaging in extracurricular activities | 2.27 | core |
+| Team work and dialogue with colleagues | 3.14 | communicate |
+| Counselling students | 3.37 | communicate |
+| Communication and co-operation with parents | 1.61 | communicate |
+| General administrative work | 4.44 | admin |
+| Participation in school management | 4.40 | admin |
+| Individual planning or preparation of lessons | 8.01 | learn |
+| Professional development activities | 2.76 | learn |
+| Other work tasks | 2.01 | wait（近似） |
+| （總工時 Total working hours） | 37.08 | 不使用 |
+
+核心 24.92、溝通 8.12、行政 8.84、學習 10.77、零碎 2.01，合計 54.66。以 54.66 為分母、最大餘數法得 **45 / 15 / 16 / 20 / 4**。`tests/allocation.test.ts` 會驗證 JSON 與這個換算一致。
+
+對照：國中（Table I.2.27）臺灣總工時 35.73、教學 17.16、備課 6.94；OECD 平均（國中，31 國）總工時 38.83、教學 20.64、備課 6.53。高中職表沒有 OECD 平均列，所以遊戲內不做跨國比較。
+
+### 限制（已寫入遊戲內來源說明）
+- **各項加總 54.66 ≠ 總工時 37.08**。原表註 2：各項是分開詢問的，所以不相等；平均也包含兼任教師。本專案取「各項占加總的比例」，這個做法放大或縮小個別項目的程度未知。
+- 歸類是本專案判斷，不是 OECD 的分類。最敏感的兩個判斷：備課歸「學習與準備」（符合遊戲 learn 的定義與 t-prep 事件）、課外活動歸核心。
+- TALIS 沒有「等待、移動」類別，遊戲的零碎類只能用「其他工作」近似（4%）。
+- 2018 年調查，自我回報「最近一個完整工作週」；臺灣資料由國際團隊代為蒐集處理。
+- 這是全體高中職教師平均，不是「兼任導師的數學老師」；遊戲主角的情境是虛構的。
+
+狀態：**比例已有公開來源**，遊戲內不再標示為推估。
