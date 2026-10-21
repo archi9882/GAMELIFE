@@ -20,6 +20,7 @@ import {
   timelineProgress,
   type GameState,
 } from "../engine/game";
+import { splitPages } from "../engine/text";
 import { allocationIsEstimate, buildProfile, compareAllocation } from "../engine/scoring";
 import { createScene, hasScene, type SceneHandle } from "../scene";
 import { drawCard } from "./card";
@@ -97,6 +98,7 @@ function bindTerms(): void {
 }
 
 let hintShown = false;
+let bodyPage = { eventId: "", index: 0 };
 let root: HTMLElement;
 let stageEl: HTMLElement;
 let stageHost: HTMLElement;
@@ -310,22 +312,37 @@ function renderPlay(career: Career, s: GameState): void {
     bindTerms();
     return;
   }
+  if (bodyPage.eventId !== e.id) bodyPage = { eventId: e.id, index: 0 };
+  const pages = splitPages(e.body);
+  const last = bodyPage.index >= pages.length - 1;
+  const visible = [e.title, pages[bodyPage.index], ...(last ? e.choices.map((c) => c.label) : [])];
   root.innerHTML = `
     <main class="screen play">
       ${head}
       <article class="card">
         <h2>${annotate(e.title, career)}</h2>
-        <p>${annotate(e.body, career)}</p>
+        <p>${annotate(pages[bodyPage.index], career)}</p>
+        ${
+          last
+            ? ""
+            : `<div class="pager"><span class="muted">${bodyPage.index + 1} / ${pages.length}</span><button class="primary" id="page-next">繼續</button></div>`
+        }
       </article>
-      <div class="choices">
-        ${e.choices.map((c, i) => `<button class="choice" data-i="${i}">${esc(c.label)}</button>`).join("")}
-      </div>
-      ${glossHtml(termsIn([e.title, e.body, ...e.choices.map((c) => c.label)], career))}
+      ${
+        last
+          ? `<div class="choices">${e.choices.map((c, i) => `<button class="choice" data-i="${i}">${esc(c.label)}</button>`).join("")}</div>`
+          : ""
+      }
+      ${glossHtml(termsIn(visible, career))}
       <details class="src"><summary>這個情境的依據</summary>${sourcesHtml(e.sources)}</details>
     </main>`;
   root.querySelectorAll<HTMLButtonElement>(".choice").forEach((b) =>
     b.addEventListener("click", () => setState(choose(career, s, Number(b.dataset.i)))),
   );
+  root.querySelector("#page-next")?.addEventListener("click", () => {
+    bodyPage = { eventId: e.id, index: bodyPage.index + 1 };
+    render();
+  });
   bindBack();
   bindTerms();
 }
