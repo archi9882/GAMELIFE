@@ -1,5 +1,4 @@
 :root {
-  color-scheme: light;
   --bg: #f6f3ee;
   --surface: #ffffff;
   --ink: #2b2520;
@@ -12,9 +11,27 @@
   --up: #2f7d4f;
   --down: #b23a3a;
   --warn-bg: #fdf0dc;
+  --warn-line: #efd3a8;
+  --up-bg: #e3f1e8;
+  --down-bg: #f6e1e1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1c1916; --surface: #272320; --ink: #f1ebe3; --muted: #a39a8e; --line: #3b352f;
+    --accent: #e0805a; --accent-ink: #1c1916; --pred: #7f8ea3; --act: #e0805a;
+    --up: #7fcf9d; --down: #ee8d8d; --warn-bg: #3a2f1c; --warn-line: #5d4a28;
+    --up-bg: #22362a; --down-bg: #3d2626; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1c1916; --surface: #272320; --ink: #f1ebe3; --muted: #a39a8e; --line: #3b352f;
+  --accent: #e0805a; --accent-ink: #1c1916; --pred: #7f8ea3; --act: #e0805a;
+  --up: #7fcf9d; --down: #ee8d8d; --warn-bg: #3a2f1c; --warn-line: #5d4a28;
+  --up-bg: #22362a; --down-bg: #3d2626; color-scheme: dark;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--ink); }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); }
 body {
   font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
   font-size: 17px;
@@ -28,7 +45,7 @@ p { margin: 0.4em 0 0.8em; }
 .kicker { color: var(--accent); font-weight: 600; font-size: 0.85rem; letter-spacing: 0.04em; margin: 0; }
 .muted { color: var(--muted); font-size: 0.85rem; }
 .notice { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-size: 0.92rem; }
-.notice.warn { background: var(--warn-bg); border-color: #efd3a8; }
+.notice.warn { background: var(--warn-bg); border-color: var(--warn-line); }
 .hero { padding: 24px 0 8px; }
 .hero h1 { font-size: 2.4rem; }
 
@@ -79,8 +96,8 @@ input[type="range"] { width: 100%; height: 36px; accent-color: var(--accent); ma
 }
 .deltas { display: flex; flex-wrap: wrap; gap: 6px; }
 .delta { font-size: 0.85rem; padding: 2px 10px; border-radius: 999px; font-weight: 600; }
-.delta.up { background: #e3f1e8; color: var(--up); }
-.delta.down { background: #f6e1e1; color: var(--down); }
+.delta.up { background: var(--up-bg); color: var(--up); }
+.delta.down { background: var(--down-bg); color: var(--down); }
 
 .src { margin-top: 14px; font-size: 0.85rem; color: var(--muted); }
 .src summary { cursor: pointer; padding: 6px 0; }
@@ -102,4 +119,27 @@ input[type="range"] { width: 100%; height: 36px; accent-color: var(--accent); ma
 .b { height: 100%; border-radius: 5px; min-width: 2px; }
 
 .result-card { display: block; width: 100%; height: auto; border-radius: 16px; border: 1px solid var(--line); margin: 12px 0 0; }
-.actions { display: grid; gap: 0; }
+.save-hint { text-align: center; margin: 10px 0 0; }
+
+/* 3D 場景 */
+#stage { position: relative; max-width: 520px; margin: 0 auto; }
+#stage-canvas { height: clamp(210px, 34vh, 300px); overflow: hidden; background: var(--line); }
+#stage-canvas canvas { display: block; width: 100%; height: 100%; }
+.stage-label {
+  position: absolute; left: 12px; bottom: 10px; padding: 3px 12px; border-radius: 999px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+  font-size: 0.85rem; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+
+/* 名詞折疊 */
+.term {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
+  border-bottom: 2px dotted var(--accent); line-height: inherit;
+}
+.term:focus-visible, summary:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.gloss { margin: 12px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0 14px; }
+.gloss > summary { cursor: pointer; padding: 10px 0; font-weight: 600; font-size: 0.92rem; }
+.gloss-list { display: grid; gap: 0; padding-bottom: 6px; }
+.gloss-item { border-top: 1px solid var(--line); }
+.gloss-item summary { cursor: pointer; padding: 9px 0; font-size: 0.95rem; color: var(--accent); font-weight: 600; }
+.gloss-item p { margin: 0 0 10px; font-size: 0.92rem; }

@@ -4,6 +4,14 @@
   "intro": "你是一位跟著師傅做了三年的水電工，手上有丙級室內配線證照。今天要去一間三十年的老公寓修漏水、換線路。",
   "dayStart": "07:30",
   "dayEnd": "17:30",
+  "locations": [
+    { "id": "van", "name": "貨車" },
+    { "id": "shop", "name": "材料行" },
+    { "id": "door", "name": "公寓門口" },
+    { "id": "living", "name": "客廳" },
+    { "id": "bathroom", "name": "浴室" },
+    { "id": "ceiling", "name": "天花板夾層" }
+  ],
   "actualAllocation": { "core": 45, "communicate": 15, "admin": 10, "wait": 20, "learn": 10 },
   "allocationSources": [
     {
@@ -23,6 +31,7 @@
     {
       "id": "p-supply",
       "time": "07:30",
+      "location": "shop",
       "category": "wait",
       "title": "材料行排隊",
       "body": "一早到材料行備料，前面已經排了好幾台工程車。你要的那款防水接頭剛好缺貨。",
@@ -49,6 +58,7 @@
     {
       "id": "p-arrive",
       "time": "08:40",
+      "location": "door",
       "category": "communicate",
       "title": "屋主不在家",
       "body": "到了案場，按門鈴沒人應。打電話過去，屋主說在送小孩上學，要四十分鐘才會回來。",
@@ -74,6 +84,7 @@
     {
       "id": "p-leak",
       "time": "09:30",
+      "location": "bathroom",
       "category": "core",
       "title": "找出漏水點",
       "body": "樓下鄰居的天花板有水漬。你檢查浴室，可能是給水管，也可能是排水管或磁磚縫滲水。",
@@ -101,6 +112,7 @@
     {
       "id": "p-quote",
       "time": "10:40",
+      "location": "living",
       "category": "communicate",
       "title": "「怎麼這麼貴？」",
       "body": "你報價換管加修復磁磚，屋主皺眉說網路上看到別人只要一半，問能不能便宜一點。",
@@ -133,6 +145,7 @@
     {
       "id": "p-ceiling",
       "time": "11:30",
+      "location": "ceiling",
       "category": "core",
       "title": "天花板裡的電線",
       "body": "順便檢查電線時，你要爬上梯子鑽進天花板。裡面很悶，手邊的安全帶要另外找地方固定。",
@@ -158,6 +171,7 @@
     {
       "id": "p-old-wire",
       "time": "12:20",
+      "location": "ceiling",
       "category": "communicate",
       "title": "老化的線路",
       "body": "天花板裡的電線外皮已經硬化龜裂，有短路風險。但這不在今天的報價範圍內。",
@@ -183,6 +197,7 @@
     {
       "id": "p-lunch",
       "time": "12:50",
+      "location": "van",
       "category": "admin",
       "title": "車上的午餐",
       "body": "你在車上吃便當，LINE 跳出三個新客戶的訊息，都傳了照片想先問大概多少錢。",
@@ -208,6 +223,7 @@
     {
       "id": "p-short",
       "time": "13:40",
+      "location": "bathroom",
       "category": "core",
       "title": "材料不夠",
       "requires": ["lowball"],
@@ -234,6 +250,7 @@
     {
       "id": "p-apprentice",
       "time": "14:30",
+      "location": "bathroom",
       "category": "learn",
       "title": "學徒接錯管",
       "body": "跟你一起來的學徒阿凱把冷熱水管接反了，自己還沒發現。再過一小時就要封牆。",
@@ -259,6 +276,7 @@
     {
       "id": "p-test",
       "time": "15:40",
+      "location": "bathroom",
       "category": "core",
       "title": "通水測試",
       "requires": ["found_leak"],
@@ -285,6 +303,7 @@
     {
       "id": "p-study",
       "time": "17:00",
+      "location": "van",
       "category": "learn",
       "title": "乙級證照",
       "body": "收工後，師傅提醒你：想自己接更大的案子，最好考乙級室內配線技術士。今晚有讀書會。",
@@ -307,6 +326,25 @@
         { "type": "fiction", "title": "虛構情境", "note": "對應勞動部技術士技能檢定「室內配線」職類（分甲、乙、丙級）；證照與承攬資格的關係待研究代理查證。" }
       ]
     }
+  ],
+  "glossary": [
+    { "term": "師傅", "meaning": "帶學徒、在現場負責技術判斷的資深工人。" },
+    { "term": "學徒", "meaning": "跟著師傅邊做邊學的新手。" },
+    { "term": "丙級", "meaning": "技術士技能檢定中的入門等級。" },
+    { "term": "乙級", "meaning": "技術士技能檢定中，比丙級更高一階的等級。" },
+    { "term": "室內配線", "meaning": "在建築物內部安裝和維修電線、開關與插座。" },
+    { "term": "材料行", "meaning": "專門賣水電、五金材料的店，工班常在開工前到這裡備料。" },
+    { "term": "防水接頭", "meaning": "接水管時，用來防止接縫漏水的零件。" },
+    { "term": "給水管", "meaning": "把乾淨的自來水送進屋內的管線。" },
+    { "term": "排水管", "meaning": "把用過的水排到下水道的管線。" },
+    { "term": "水錶", "meaning": "計算用水量的儀表。施工前通常會先關閉總水閥。" },
+    { "term": "壓力測試", "meaning": "把管路加壓後靜置一段時間，看壓力有沒有下降，確認有沒有漏水。" },
+    { "term": "報價", "meaning": "開工前先把材料費和工資估成價格，告訴屋主。" },
+    { "term": "工料", "meaning": "「工」是人工費，「料」是材料費。" },
+    { "term": "安全帶", "meaning": "高處作業時繫在身上、扣在固定點，防止墜落的裝備。" },
+    { "term": "短路", "meaning": "電流不走正常線路、直接走捷徑；電流過大時會發熱，可能引起火災。" },
+    { "term": "明管", "meaning": "管線外露在牆面上、沒有埋進牆裡的施工方式。" },
+    { "term": "封牆", "meaning": "管線測試沒問題後，把牆面補平、貼回磁磚。" }
   ],
   "reflections": [
     "你喜歡「做完能看到、摸到」的成果嗎？那種感覺跟被人感謝比起來呢？",

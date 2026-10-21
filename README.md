@@ -16,6 +16,7 @@ npm run build      # 產出 dist/，並另外產出單檔 dist/career-day.html
 | `content/schema.ts` | 劇本型別與 `validateCareer()`（字數、加總、來源、明顯正解、前置旗標） |
 | `content/careers/*.json` | 高中老師、軟體工程師、水電工劇本 |
 | `src/engine/` | 狀態機（預測 → 上班 → 對照 → 結算）與計分，純函式 |
+| `src/scene/` | three.js 方塊風 3D 場景（目前僅水電工），由 `locations` 與事件的 `location` 驅動 |
 | `src/ui/` | 畫面、Canvas 結算卡、localStorage（失敗也能玩） |
 | `tests/` | 格式驗證、窮舉所有選擇路線的可達性測試 |
 | `research/` | 各職業來源查證紀錄與待查清單 |
@@ -24,3 +25,8 @@ npm run build      # 產出 dist/，並另外產出單檔 dist/career-day.html
 - **三個職業的時間比例目前都是推估**（`type: "fiction"`），遊戲對照畫面與結算卡會標示。查到的公開資料只用於定性說明，見 `research/`。
 - 事件情境全部虛構，對應公開描述的工作內容。
 - 本專案的程式、劇本與研究筆記由 AI（Claude Code）起草，需人工審閱，特別是劇本的真實性。
+
+## v0.2：3D 與名詞折疊
+- 水電工有等角視角的方塊風場景（材料行、貨車、剖開的公寓與夾層），角色依事件走到對應地點，光線隨一天推進變化。其他職業與沒有 WebGL 的裝置退回純卡片。
+- 工作中的專有名詞以虛線底線標示，點開看解釋；每個畫面另有「名詞解釋」折疊區。解釋為一般性說明，不含具體數字或法規條文，尚待真實性審查。
+- 規格變更見 `SPEC.md` 附錄 B。

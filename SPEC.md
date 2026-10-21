@@ -98,7 +98,7 @@ interface Source {
 
 - TypeScript + Vite，純前端，無後端
 - 手機直向優先，最小寬度 360px
-- 2D 卡片式介面 + 頂部時間軸
+- 事件以卡片呈現，上方為 3D 場景（見 §4.1）+ 時間軸；沒有 3D 場景的職業退回純卡片
 - 結算卡：前端 Canvas 生成 PNG，可下載/分享
 - 進度存 localStorage（包 try/catch，失敗也能玩）
 
@@ -139,3 +139,29 @@ interface Source {
 - `Career.practitionerFeedback?`：從業者回饋預留欄位（§3.4）。
 - 「我以為這份工作不用做這個」事件以標籤 `意想不到` 標示；測試保證每條路線至少遇到一個。
 - 「每個選項都要有代價」的可驗證定義：每個選項至少一項資源為負，且同一事件內沒有選項在三項資源上全面優於另一個。
+
+## 附錄 B：v0.2 規格變更（3D 與名詞折疊）
+
+### 4.1 3D 場景
+- 風格：**方塊風（voxel／低多邊形）**，全部用程式以方塊拼出，不使用外部模型檔。
+- 視角：等角（isometric）正交相機，場景為「剖開的模型屋」，玩家角色依事件的 `location` 在地點之間走動。
+- 引擎：three.js（隨 Vite 打包，不走 CDN）；引擎與劇本維持分離，3D 只讀取 `GameState` 與目前事件。
+- 氣氛：光線與天色隨一天的進度（早晨 → 正午 → 傍晚）變化。目標是讓玩家看見工作的樣子，不營造壓迫感。
+- 降級：沒有 WebGL 或該職業沒有場景時，自動退回純卡片介面，不影響遊玩。
+- `prefers-reduced-motion`：角色直接瞬移、不做彈跳動畫。
+- 原型範圍：**僅水電工**有場景；老師與軟體工程師後續再做。
+
+### 劇本格式新增欄位（皆為選填，向下相容）
+```ts
+interface GlossaryTerm { term: string; meaning: string; note?: string }  // meaning ≤ 80 字
+interface Location { id: string; name: string }
+// Career.glossary?: GlossaryTerm[]    名詞折疊
+// Career.locations?: Location[]       有 3D 場景的職業必填
+// GameEvent.location?: string         必須是 Career.locations 的 id；有 locations 時每個事件都要填
+```
+
+### 名詞折疊
+- 工作內容中的專有名詞（例如「回滾」「壓力測試」「段考」）在畫面上以虛線底線標示，點一下展開解釋。
+- 每個畫面另有「名詞解釋（n）」折疊區，列出該畫面出現的所有名詞。
+- 名詞解釋屬一般性說明，**不得包含具體數字或法規條文**；若需引用，必須附 `Source` 並通過真實性審查。
+- 驗證：每個名詞必須實際出現在簡介或事件文字中，解釋不得為空、不得超過字數上限。

@@ -25,6 +25,17 @@ export interface Choice {
   setFlags?: string[];
 }
 
+export interface GlossaryTerm {
+  term: string;
+  meaning: string;
+  note?: string;
+}
+
+export interface Location {
+  id: string;
+  name: string;
+}
+
 export interface GameEvent {
   id: string;
   time: string;
@@ -35,6 +46,8 @@ export interface GameEvent {
   tags: string[];
   sources: Source[];
   requires?: string[];
+  /** 3D 場景中的地點（Career.locations 的 id） */
+  location?: string;
 }
 
 export interface PractitionerFeedback {
@@ -54,6 +67,10 @@ export interface Career {
   reflections: string[];
   /** 對照畫面：落差最大的一類要顯示的說明（選填，v0.1 擴充） */
   categoryNotes?: Partial<Record<Category, string>>;
+  /** 名詞折疊：工作中的專有名詞與一般性解釋 */
+  glossary?: GlossaryTerm[];
+  /** 3D 場景地點；有場景的職業必填 */
+  locations?: Location[];
   /** 從業者回饋預留欄位（SPEC §3.4） */
   practitionerFeedback?: PractitionerFeedback[];
 }
@@ -78,6 +95,7 @@ export const LIMITS = {
   outcomeMax: 60,
   effectAbsMax: 30,
   achievementMin: 2,
+  glossaryMax: 80,
 } as const;
 
 /** 以 code point 計字數（中文一字算一） */
@@ -146,6 +164,22 @@ export function validateCareer(c: Career): string[] {
   const achievement = events.filter((e) => e.tags?.includes(ACHIEVEMENT_TAG)).length;
   if (achievement < LIMITS.achievementMin) errors.push(at(`「${ACHIEVEMENT_TAG}」事件至少 ${LIMITS.achievementMin} 個（目前 ${achievement}）`));
 
+  const allText = [
+    c.intro,
+    ...events.flatMap((e) => [e.title, e.body, ...(e.choices ?? []).flatMap((ch) => [ch.label, ch.outcome])]),
+  ].join("\n");
+  const seenTerms = new Set<string>();
+  for (const g of c.glossary ?? []) {
+    const w = at(`名詞 ${g.term}`);
+    if (!g.term) errors.push(at("glossary 有空白的 term"));
+    if (seenTerms.has(g.term)) errors.push(`${w}: term 重複`);
+    seenTerms.add(g.term);
+    if (!g.meaning || charLen(g.meaning) > LIMITS.glossaryMax) errors.push(`${w}: meaning 需 1–${LIMITS.glossaryMax} 字（${charLen(g.meaning ?? "")}）`);
+    if (g.term && !allText.includes(g.term)) errors.push(`${w}: 沒有出現在簡介或任何事件文字中`);
+  }
+  const locationIds = new Set((c.locations ?? []).map((l) => l.id));
+  if (locationIds.size !== (c.locations ?? []).length) errors.push(at("locations 的 id 重複"));
+
   const ids = new Set<string>();
   const flagsSetBefore = new Set<string>();
   let prevTime = -1;
@@ -162,6 +196,8 @@ export function validateCareer(c: Career): string[] {
       prevTime = t;
     }
     if (!e.title) errors.push(`${w}: title 必填`);
+    if (locationIds.size > 0 && (!e.location || !locationIds.has(e.location))) errors.push(`${w}: location 必須是 locations 其中之一（目前 ${e.location ?? "未填"}）`);
+    if (locationIds.size === 0 && e.location) errors.push(`${w}: 有 location 但職業沒有定義 locations`);
     if (charLen(e.body ?? "") > LIMITS.bodyMax) errors.push(`${w}: body 超過 ${LIMITS.bodyMax} 字（${charLen(e.body)}）`);
     if (!Array.isArray(e.tags)) errors.push(`${w}: tags 必填`);
     checkSources(e.sources, w, errors);

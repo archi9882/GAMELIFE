@@ -1,6 +1,15 @@
 // 畫面渲染：每次狀態改變就整頁重畫（畫面小，簡單優先）。
 import { careers, getCareer } from "../../content/index";
-import { CATEGORIES, CATEGORY_LABELS, type Career, type Category, type Source, type Stat } from "../../content/schema";
+import {
+  CATEGORIES,
+  CATEGORY_LABELS,
+  type Career,
+  type Category,
+  type GameEvent,
+  type GlossaryTerm,
+  type Source,
+  type Stat,
+} from "../../content/schema";
 import {
   advance,
   choose,
@@ -12,6 +21,7 @@ import {
   type GameState,
 } from "../engine/game";
 import { allocationIsEstimate, buildProfile, compareAllocation } from "../engine/scoring";
+import { createScene, hasScene, type SceneHandle } from "../scene";
 import { drawCard } from "./card";
 import { load, save } from "./storage";
 
@@ -21,7 +31,75 @@ const STAT_LABELS: Record<Stat, string> = { energy: "精力", time: "時間", tr
 const esc = (s: string): string =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
+const escRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** 名詞比對：ASCII 名詞（PR、CI）要整字比對，避免命中別的單字 */
+function termRegex(terms: GlossaryTerm[]): RegExp | null {
+  if (!terms.length) return null;
+  const parts = [...terms]
+    .sort((a, b) => b.term.length - a.term.length)
+    .map((t) => {
+      const lead = /^[A-Za-z0-9]/.test(t.term) ? "(?<![A-Za-z0-9])" : "";
+      const tail = /[A-Za-z0-9]$/.test(t.term) ? "(?![A-Za-z0-9])" : "";
+      return `${lead}${escRe(t.term)}${tail}`;
+    });
+  return new RegExp(parts.join("|"), "g");
+}
+
+/** 把文字轉成安全的 HTML，並把名詞包成可點的按鈕 */
+function annotate(text: string, career: Career): string {
+  const re = termRegex(career.glossary ?? []);
+  if (!re) return esc(text);
+  let out = "";
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    out += esc(text.slice(last, m.index));
+    out += `<button type="button" class="term" data-term="${esc(m[0])}">${esc(m[0])}</button>`;
+    last = m.index! + m[0].length;
+  }
+  return out + esc(text.slice(last));
+}
+
+/** 這些文字裡出現的名詞（依出現順序） */
+function termsIn(texts: string[], career: Career): GlossaryTerm[] {
+  const re = termRegex(career.glossary ?? []);
+  if (!re) return [];
+  const seen: string[] = [];
+  for (const m of texts.join("\n").matchAll(re)) if (!seen.includes(m[0])) seen.push(m[0]);
+  return seen.map((t) => career.glossary!.find((g) => g.term === t)!);
+}
+
+function glossHtml(terms: GlossaryTerm[]): string {
+  if (!terms.length) return "";
+  return `<details class="gloss"><summary>名詞解釋（${terms.length}）</summary>
+    <div class="gloss-list">${terms
+      .map(
+        (t) => `<details class="gloss-item" data-term="${esc(t.term)}"><summary>${esc(t.term)}</summary><p>${esc(t.meaning)}</p></details>`,
+      )
+      .join("")}</div></details>`;
+}
+
+/** 點內文中的名詞：展開「名詞解釋」並打開對應那一條 */
+function bindTerms(): void {
+  root.querySelectorAll<HTMLButtonElement>(".term").forEach((b) =>
+    b.addEventListener("click", () => {
+      const gloss = root.querySelector<HTMLDetailsElement>(".gloss");
+      const item = gloss?.querySelector<HTMLDetailsElement>(`.gloss-item[data-term="${CSS.escape(b.dataset.term!)}"]`);
+      if (!gloss || !item) return;
+      const wasOpen = gloss.open && item.open;
+      gloss.open = !wasOpen;
+      item.open = !wasOpen;
+      if (!wasOpen) item.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }),
+  );
+}
+
 let root: HTMLElement;
+let stageEl: HTMLElement;
+let stageHost: HTMLElement;
+let stageLabel: HTMLElement;
+let scene: SceneHandle | null = null;
+let sceneCareerId: string | null = null;
 let state: GameState | null = null;
 let draft: Record<Category, number> | null = null;
 
@@ -33,15 +111,54 @@ function setState(s: GameState | null): void {
 }
 
 export function mount(el: HTMLElement): void {
-  root = el;
+  el.innerHTML = `<div id="stage" hidden><div id="stage-canvas"></div><span id="stage-label" class="stage-label"></span></div><div id="ui"></div>`;
+  stageEl = el.querySelector("#stage")!;
+  stageHost = el.querySelector("#stage-canvas")!;
+  stageLabel = el.querySelector("#stage-label")!;
+  root = el.querySelector("#ui")!;
   const saved = load();
   state = saved && getCareer(saved.careerId) ? saved : null;
   render();
 }
 
+function leaveStage(dispose: boolean): void {
+  stageEl.hidden = true;
+  scene?.setActive(false);
+  if (dispose) {
+    scene?.dispose();
+    scene = null;
+    sceneCareerId = null;
+  }
+}
+
+/** 遊玩畫面上方的 3D 場景；沒有場景或不支援 WebGL 時隱藏，退回純卡片 */
+function updateStage(career: Career, s: GameState, e: GameEvent): void {
+  if (!hasScene(career.id)) return leaveStage(false);
+  stageEl.hidden = false;
+  if (!scene || sceneCareerId !== career.id) {
+    scene?.dispose();
+    scene = createScene(career.id, stageHost);
+    sceneCareerId = career.id;
+  }
+  if (!scene) {
+    stageEl.hidden = true;
+    return;
+  }
+  scene.setActive(true);
+  scene.setFlags(s.flags);
+  scene.setProgress(timelineProgress(career, s));
+  scene.setLocation(e.location);
+  const place = career.locations?.find((l) => l.id === e.location)?.name;
+  stageLabel.textContent = `${e.time}${place ? `・${place}` : ""}`;
+}
+
 function render(): void {
-  if (!state) return renderHome();
+  if (!state) {
+    leaveStage(true);
+    return renderHome();
+  }
   const career = getCareer(state.careerId)!;
+  if (state.phase !== "play") leaveStage(false);
   switch (state.phase) {
     case "predict":
       return renderPredict(career, state);
@@ -109,7 +226,8 @@ function renderPredict(career: Career, s: GameState): void {
       ${backButton()}
       <p class="kicker">第 1 步・預測</p>
       <h1>${esc(career.name)}</h1>
-      <p>${esc(career.intro)}</p>
+      <p>${annotate(career.intro, career)}</p>
+      ${glossHtml(termsIn([career.intro], career))}
       <p class="notice">你覺得這份工作一天的時間，大概怎麼分配？拉動滑桿，系統會自動換算成百分比。</p>
       <div class="sliders">
         ${CATEGORIES.map(
@@ -129,6 +247,7 @@ function renderPredict(career: Career, s: GameState): void {
     }),
   );
   bindBack();
+  bindTerms();
   root.querySelector("#go")!.addEventListener("click", () => {
     const next = submitPrediction(career, s, d);
     draft = null;
@@ -168,6 +287,7 @@ function deltaHtml(effects: Partial<Record<Stat, number>>): string {
 function renderPlay(career: Career, s: GameState): void {
   const e = currentEvent(career, s);
   if (!e) return setState(advance(career, s));
+  updateStage(career, s, e);
   const head = `${backButton()}${timelineHtml(career, s, `${e.time}・${CATEGORY_LABELS[e.category]}`)}${statsHtml(s)}`;
   if (s.pendingOutcome) {
     const ch = e.choices[s.pendingOutcome.choiceIndex];
@@ -176,31 +296,35 @@ function renderPlay(career: Career, s: GameState): void {
         ${head}
         <article class="card">
           <p class="kicker">你選了：${esc(ch.label)}</p>
-          <p class="outcome">${esc(ch.outcome)}</p>
+          <p class="outcome">${annotate(ch.outcome, career)}</p>
           <div class="deltas">${deltaHtml(ch.effects)}</div>
         </article>
+        ${glossHtml(termsIn([ch.label, ch.outcome], career))}
         <button class="primary" id="next">繼續</button>
       </main>`;
     root.querySelector("#next")!.addEventListener("click", () => setState(advance(career, s)));
     bindBack();
+    bindTerms();
     return;
   }
   root.innerHTML = `
     <main class="screen play">
       ${head}
       <article class="card">
-        <h2>${esc(e.title)}</h2>
-        <p>${esc(e.body)}</p>
+        <h2>${annotate(e.title, career)}</h2>
+        <p>${annotate(e.body, career)}</p>
       </article>
       <div class="choices">
         ${e.choices.map((c, i) => `<button class="choice" data-i="${i}">${esc(c.label)}</button>`).join("")}
       </div>
+      ${glossHtml(termsIn([e.title, e.body, ...e.choices.map((c) => c.label)], career))}
       <details class="src"><summary>這個情境的依據</summary>${sourcesHtml(e.sources)}</details>
     </main>`;
   root.querySelectorAll<HTMLButtonElement>(".choice").forEach((b) =>
     b.addEventListener("click", () => setState(choose(career, s, Number(b.dataset.i)))),
   );
   bindBack();
+  bindTerms();
 }
 
 function biggestGapText(career: Career, s: GameState): string {
@@ -251,10 +375,7 @@ function renderResult(career: Career, s: GameState): void {
       <h1>今天的你</h1>
       <p class="notice">這張卡描述的是你今天做選擇時的節奏偏好與價值取向，不是「你適合當${esc(career.name)}」。</p>
       <img class="result-card" src="${url}" alt="結算卡：節奏${esc(p.pace.label)}，互動${esc(p.social.label)}，成就來源${esc(p.achieve.label)}，壓力類型${esc(p.pressure.label)}" />
-      <div class="actions">
-        <a class="primary" id="dl" href="${url}" download="career-day-${career.id}.png">下載結算卡</a>
-        <button class="secondary" id="share" hidden>分享</button>
-      </div>
+      <p class="muted save-hint">長按上方結算卡圖片，選「加入照片」或「儲存圖片」即可存到手機，再分享給朋友。</p>
       <article class="card">
         <h2>想一想</h2>
         <ul>${career.reflections.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
@@ -262,17 +383,6 @@ function renderResult(career: Career, s: GameState): void {
       <p class="muted">${DISCLAIMER}</p>
       <button class="secondary" id="again">換一份工作</button>
     </main>`;
-  const share = root.querySelector<HTMLButtonElement>("#share")!;
-  canvas.toBlob((blob) => {
-    if (!blob) return;
-    const file = new File([blob], `career-day-${career.id}.png`, { type: "image/png" });
-    if (navigator.canShare?.({ files: [file] })) {
-      share.hidden = false;
-      share.addEventListener("click", () => {
-        navigator.share({ files: [file], title: "職場一日" }).catch(() => undefined);
-      });
-    }
-  });
   root.querySelector("#again")!.addEventListener("click", () => setState(null));
 }
 
