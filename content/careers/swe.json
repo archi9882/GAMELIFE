@@ -4,23 +4,18 @@
   "intro": "你是一家電商公司的後端工程師，團隊用兩週一個迭代（sprint）的方式開發。這週要上線新的結帳功能。",
   "dayStart": "09:30",
   "dayEnd": "18:30",
-  "actualAllocation": { "core": 35, "communicate": 25, "admin": 10, "wait": 10, "learn": 20 },
+  "actualAllocation": { "core": 50, "communicate": 39, "admin": 5, "wait": 3, "learn": 3 },
   "allocationSources": [
     {
-      "type": "fiction",
-      "title": "遊戲設計推估比例",
-      "note": "尚未取得可直接換算成五類比例的公開數字，此比例為推估。"
-    },
-    {
       "type": "public_report",
-      "title": "Today was a Good Day: The Daily Life of Software Developers（Meyer, Barr, Bird, Zimmermann, IEEE TSE 2021）",
-      "url": "https://www.microsoft.com/en-us/research/?p=578803",
-      "note": "定性參考：該研究以 5971 份微軟開發者回覆指出，開發者實際花在開發的時間不多，會議與打斷很常見。具體百分比尚未查證，未寫入。"
+      "title": "Today was a Good Day: The Daily Life of Software Developers（Meyer, Barr, Bird, Zimmermann, IEEE TSE 2021）Table 2",
+      "url": "https://www.microsoft.com/en-us/research/wp-content/uploads/2019/04/devtime-preprint-TSE19.pdf",
+      "note": "微軟開發者自我回報前一個工作日的時間分配（全部工作日，N=5928，平均 9.08 小時）。遊戲五類由本專案換算：核心＝寫程式 15、除錯 14、測試 8、需求 4、審查 5（46）；溝通＝會議 15、Email 10、打斷 4、協助他人 5、人脈 2（36）；行政＝行政 2、文件 2（4）；學習＝3；零碎＝雜項 3（含移動、規劃、環境架設）。原表另有「休息 8%」，不在遊戲五類內，已排除並把其餘 92% 重新換算成 100（最大餘數法）。限制：單一公司（微軟）、自我回報、軟體業；臺灣工程師不一定相同。"
     }
   ],
   "categoryNotes": {
-    "core": "真正寫程式的時間通常比想像中少，而且常被切成零碎的片段。",
-    "communicate": "站會、需求討論、code review 都是溝通。軟體是團隊一起做的東西。",
+    "core": "在這份微軟調查裡，開發相關活動（寫程式、除錯、測試、需求、審查、文件）加起來約 48%，但單純寫程式只有 15%，除錯就占 14%。",
+    "communicate": "會議占 15%、Email 占 10%，再加上被打斷和協助同事，溝通類約占一天的三分之一。軟體是團隊一起做的東西。",
     "admin": "寫文件、填工單、整理事後檢討報告，這些也是工程師的工作。",
     "wait": "等 CI 跑完、等別的團隊回覆、等環境部署，零碎的等待會累積。",
     "learn": "技術變化很快，讀文件、查資料、學新工具幾乎每天都在發生。"
@@ -343,7 +338,7 @@
   ],
   "reflections": [
     "你比較享受一個人專注解開問題，還是跟人一起把事情推進？",
-    "如果寫程式只占一天的三分之一，其他時間你願意花在哪裡？"
+    "如果單純寫程式只占一天的 15%，其他時間你願意花在哪裡？"
   ],
   "practitionerFeedback": []
 }

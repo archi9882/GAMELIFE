@@ -363,8 +363,8 @@ function renderCompare(career: Career, s: GameState): void {
     <main class="screen">
       <p class="kicker">第 3 步・對照</p>
       <h1>想像 vs 實際</h1>
-      ${estimate ? `<p class="notice warn">此比例為推估：目前還沒有可直接引用的公開數字，請參考下方來源說明。</p>` : ""}
-      <div class="legend"><span class="sw pred"></span>你的預測 <span class="sw act"></span>${estimate ? "推估比例" : "實際比例"}</div>
+      ${estimate ? `<p class="notice warn">此比例為推估：目前還沒有可直接引用的公開數字，請參考下方來源說明。</p>` : `<p class="notice">此比例由公開調查換算而來，換算方式與限制見下方「比例來源」。</p>`}
+      <div class="legend"><span class="sw pred"></span>你的預測 <span class="sw act"></span>${estimate ? "推估比例" : "公開資料換算"}</div>
       <div class="compare">
         ${rows
           .map(
