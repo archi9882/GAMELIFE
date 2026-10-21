@@ -1,88 +1,24 @@
 // 水電工場景：剖開的老公寓、材料行、貨車。全部由方塊拼成，沒有外部模型。
-// 座標：x 向右、z 朝向玩家、y 向上；相機從 (+x, +y, +z) 往下看，所以 +x/+z 側的牆不畫（剖面）。
-import {
-  AmbientLight,
-  BoxGeometry,
-  CanvasTexture,
-  Clock,
-  Color,
-  DirectionalLight,
-  Group,
-  Mesh,
-  MeshBasicMaterial,
-  MeshLambertMaterial,
-  OrthographicCamera,
-  PCFSoftShadowMap,
-  PlaneGeometry,
-  SRGBColorSpace,
-  Scene,
-  Vector3,
-  WebGLRenderer,
-} from "three";
+import { Group, Vector3 } from "three";
 import type { SceneHandle } from "./index";
+import { box, createStage, floorLabel, type Ctx, type Place, type SceneDef } from "./kit";
 
 type Zone = "out" | "in" | "attic";
-interface Place {
-  pos: Vector3;
-  zone: Zone;
-}
+const P = (x: number, y: number, z: number, zone: Zone): Place => ({ pos: new Vector3(x, y, z), zone });
 
 const PLACES: Record<string, Place> = {
-  van: { pos: new Vector3(-4.3, 0, 3.9), zone: "out" },
-  shop: { pos: new Vector3(-8.2, 0, 0.3), zone: "out" },
-  door: { pos: new Vector3(0.6, 0, 2.3), zone: "out" },
-  living: { pos: new Vector3(1.8, 0, -0.1), zone: "in" },
-  bathroom: { pos: new Vector3(6.2, 0, -1.2), zone: "in" },
-  ceiling: { pos: new Vector3(1.4, 3.2, -3.6), zone: "attic" },
+  van: P(-4.3, 0, 3.9, "out"),
+  shop: P(-8.2, 0, 0.3, "out"),
+  door: P(0.6, 0, 2.3, "out"),
+  living: P(1.8, 0, -0.1, "in"),
+  bathroom: P(6.2, 0, -1.2, "in"),
+  ceiling: P(1.4, 3.2, -3.6, "attic"),
 };
 const DOOR_IN = new Vector3(0.6, 0, 0.4);
 const LADDER_BASE = new Vector3(3.3, 0, -2.4);
 const LADDER_TOP = new Vector3(3.3, 3.2, -2.4);
 
-const geo = new BoxGeometry(1, 1, 1);
-const mats = new Map<number, MeshLambertMaterial>();
-const mat = (c: number): MeshLambertMaterial => {
-  let m = mats.get(c);
-  if (!m) mats.set(c, (m = new MeshLambertMaterial({ color: c })));
-  return m;
-};
-
-/** 以底面中心定位的方塊 */
-function box(parent: Group, w: number, h: number, d: number, color: number, x: number, y: number, z: number): Mesh {
-  const m = new Mesh(geo, mat(color));
-  m.scale.set(w, h, d);
-  m.position.set(x, y + h / 2, z);
-  m.castShadow = true;
-  m.receiveShadow = true;
-  parent.add(m);
-  return m;
-}
-
-/** 貼在地面上的區名文字（中文加英文小字），朝向與相機的「螢幕右方」對齊 */
-function floorLabel(parent: Group, zh: string, en: string, x: number, y: number, z: number, width: number): void {
-  const c = document.createElement("canvas");
-  c.width = 640;
-  c.height = 200;
-  const g = c.getContext("2d")!;
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  g.fillStyle = "rgba(43, 37, 32, 0.42)";
-  g.font = "bold 92px system-ui, 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif";
-  g.fillText(zh, 320, 72);
-  g.font = "600 46px system-ui, sans-serif";
-  g.fillText(en.split("").join(" "), 320, 152);
-  const tex = new CanvasTexture(c);
-  tex.colorSpace = SRGBColorSpace;
-  tex.anisotropy = 4;
-  const m = new Mesh(new PlaneGeometry(width, (width * c.height) / c.width), new MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
-  m.rotation.order = "YXZ";
-  m.rotation.set(-Math.PI / 2, Math.PI / 4, 0);
-  m.position.set(x, y, z);
-  parent.add(m);
-}
-
-function buildWorld(): Group {
-  const w = new Group();
+function buildWorld(w: Group): void {
   // 地面、人行道、馬路
   box(w, 30, 0.2, 22, 0xa9c19a, -2, -0.2, 0);
   box(w, 30, 0.06, 1.1, 0xbdb8ac, -2, 0, 2.7);
@@ -154,65 +90,11 @@ function buildWorld(): Group {
     box(w, 1.7, 1.5, 1.7, 0x5f9a58, x, 1.3, z);
     box(w, 1.1, 0.9, 1.1, 0x6fae66, x, 2.8, z);
   }
-  return w;
-}
-
-interface Person {
-  root: Group;
-  body: Group;
-}
-
-function makePerson(shirt: number, pants: number, hat: number | null): Person {
-  const root = new Group();
-  const body = new Group();
-  box(body, 0.28, 0.7, 0.3, pants, -0.18, 0, 0);
-  box(body, 0.28, 0.7, 0.3, pants, 0.18, 0, 0);
-  box(body, 0.74, 0.78, 0.42, shirt, 0, 0.7, 0);
-  box(body, 0.2, 0.66, 0.24, shirt, -0.5, 0.74, 0);
-  box(body, 0.2, 0.66, 0.24, shirt, 0.5, 0.74, 0);
-  box(body, 0.5, 0.5, 0.5, 0xf1c9a0, 0, 1.48, 0);
-  if (hat !== null) {
-    box(body, 0.6, 0.22, 0.6, hat, 0, 1.92, 0);
-    box(body, 0.6, 0.06, 0.24, hat, 0, 1.92, 0.32);
-  } else {
-    box(body, 0.54, 0.16, 0.54, 0x4a3426, 0, 1.96, -0.02);
-  }
-  root.add(body);
-  return { root, body };
-}
-
-class Walker {
-  route: Vector3[] = [];
-  yaw = 0;
-  constructor(readonly p: Person, readonly speed: number) {}
-  get moving(): boolean {
-    return this.route.length > 0;
-  }
-  update(dt: number, t: number, bob: boolean): void {
-    const pos = this.p.root.position;
-    if (this.route.length) {
-      const target = this.route[0];
-      const d = target.clone().sub(pos);
-      const step = this.speed * dt;
-      if (d.length() <= step) {
-        pos.copy(target);
-        this.route.shift();
-      } else {
-        d.normalize();
-        pos.addScaledVector(d, step);
-      }
-      if (Math.hypot(d.x, d.z) > 0.01) this.yaw = Math.atan2(d.x, d.z);
-    }
-    let diff = this.yaw - this.p.body.rotation.y;
-    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-    this.p.body.rotation.y += diff * Math.min(1, dt * 12);
-    this.p.body.position.y = bob && this.moving ? Math.abs(Math.sin(t * 11)) * 0.12 : 0;
-  }
 }
 
 function buildRoute(from: Place, to: Place): Vector3[] {
   const pts: Vector3[] = [];
-  let zone: Zone = from.zone;
+  let zone = from.zone;
   if (zone === "attic") {
     pts.push(LADDER_TOP, LADDER_BASE);
     zone = "in";
@@ -224,236 +106,56 @@ function buildRoute(from: Place, to: Place): Vector3[] {
   return pts;
 }
 
-const lerpColor = (a: number, b: number, t: number): Color => new Color(a).lerp(new Color(b), t);
+const def: SceneDef = {
+  ariaLabel: "水電工的一天：公寓、材料行與貨車的方塊場景",
+  world: buildWorld,
+  places: PLACES,
+  route: buildRoute,
+  player: { label: "你｜水電工", shirt: 0xee7a2f, pants: 0x2f4a6b, hat: 0xf2c230 },
+  npcs: [
+    { label: "阿凱｜學徒", cls: "mate", shirt: 0x5fae6a, pants: 0x2f4a6b, hat: 0xf2c230, pos: new Vector3(0, 0, 0), follow: { dx: -0.9, dz: 0.7 }, visible: (c) => hasEntered(c) },
+    { label: "屋主", cls: "owner", shirt: 0x6f9fbf, pants: 0x4a4a52, hat: null, pos: new Vector3(2.8, 0.2, -0.9), yaw: Math.PI * 0.75, visible: (c) => hasEntered(c) },
+  ],
+  placeTags: [
+    { text: "材料行", pos: new Vector3(-8.5, 3.9, -1) },
+    { text: "貨車", pos: new Vector3(-6.8, 2.7, 5.3) },
+    { text: "浴室", pos: new Vector3(6.4, 3.0, -4.6) },
+    { text: "天花板夾層", pos: new Vector3(1.2, 4.0, -3.8) },
+  ],
+  camera: { halfW: 8.2, target: new Vector3(-1.6, 0.8, 0), minX: -8, maxX: 6, minZ: -4, maxZ: 3 },
+  extras: (scene) => {
+    // 漏水：滴水方塊與地上的水漬，找到漏水點後消失
+    const leak = new Group();
+    const puddle = box(leak, 1.1, 0.03, 1.3, 0x7fc4e8, 5.0, 0.26, -5.1);
+    const drips = [0, 1, 2].map((i) => {
+      const m = box(leak, 0.1, 0.16, 0.1, 0x7fc4e8, 5.1, 0, -5.7);
+      m.userData.phase = i / 3;
+      return m;
+    });
+    scene.add(leak);
+    return {
+      update(_dt: number, t: number, ctx: Ctx, reduced: boolean) {
+        const show = !ctx.flags.includes("found_leak");
+        leak.visible = show;
+        if (!show) return;
+        for (const d of drips) {
+          const ph = reduced ? 0.3 : (t * 0.9 + (d.userData.phase as number)) % 1;
+          d.position.y = 1.75 - ph * 1.5;
+          d.visible = ph < 0.95;
+        }
+        puddle.visible = true;
+      },
+    };
+  },
+};
 
-/** 一天的光線：早晨暖黃 → 正午明亮 → 傍晚橘紅 */
-function dayLight(p: number): { sun: Color; sky: Color; intensity: number } {
-  if (p < 0.5) {
-    const t = p * 2;
-    return { sun: lerpColor(0xffd2a0, 0xfff4e0, t), sky: lerpColor(0xc4d9ec, 0xd3e8f6, t), intensity: 1.35 + 0.35 * t };
-  }
-  const t = (p - 0.5) * 2;
-  return { sun: lerpColor(0xfff4e0, 0xff9a60, t), sky: lerpColor(0xd3e8f6, 0xf0b898, t), intensity: 1.7 - 0.5 * t };
+/** 進過公寓（門口、客廳、浴室或夾層）之後，學徒與屋主才出現 */
+function hasEntered(c: Ctx): boolean {
+  return ["door", "living", "bathroom", "ceiling"].some((id) => c.visited.has(id));
 }
+
+export const PLUMBER_PLACE_IDS = Object.keys(PLACES);
 
 export function createPlumberScene(host: HTMLElement): SceneHandle | null {
-  let renderer: WebGLRenderer;
-  try {
-    renderer = new WebGLRenderer({ antialias: true });
-  } catch {
-    return null;
-  }
-  const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = PCFSoftShadowMap;
-  renderer.domElement.setAttribute("role", "img");
-  renderer.domElement.setAttribute("aria-label", "水電工的一天：公寓、材料行與貨車的方塊場景");
-  host.appendChild(renderer.domElement);
-
-  const scene = new Scene();
-  const CAM_OFFSET = new Vector3(14, 13, 14);
-  const target = new Vector3(-1.6, 0.8, 0);
-  const camTarget = target.clone();
-  const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 80);
-  const aimCamera = (): void => {
-    camera.position.copy(camTarget).add(CAM_OFFSET);
-    camera.lookAt(camTarget);
-  };
-  aimCamera();
-
-  const ambient = new AmbientLight(0xffffff, 0.75);
-  const sun = new DirectionalLight(0xffffff, 1.5);
-  sun.position.copy(target).add(new Vector3(9, 18, 7));
-  sun.target.position.copy(target);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -17, right: 17, top: 17, bottom: -17, near: 1, far: 60 });
-  scene.add(ambient, sun, sun.target, buildWorld());
-
-  // 漏水：滴水方塊與地上的水漬，找到漏水點後消失
-  const leak = new Group();
-  const puddle = box(leak, 1.1, 0.03, 1.3, 0x7fc4e8, 5.0, 0.26, -5.1);
-  const drips = [0, 1, 2].map((i) => {
-    const m = box(leak, 0.1, 0.16, 0.1, 0x7fc4e8, 5.1, 0, -5.7);
-    m.userData.phase = i / 3;
-    return m;
-  });
-  scene.add(leak);
-
-  const player = new Walker(makePerson(0xee7a2f, 0x2f4a6b, 0xf2c230), 5);
-  const owner = new Walker(makePerson(0x6f9fbf, 0x4a4a52, null), 0);
-  const apprentice = new Walker(makePerson(0x5fae6a, 0x2f4a6b, 0xf2c230), 4.4);
-  owner.p.root.position.set(2.8, 0.2, -0.9);
-  owner.yaw = Math.PI * 0.75;
-  for (const w of [player, owner, apprentice]) scene.add(w.p.root);
-  owner.p.root.visible = false;
-  apprentice.p.root.visible = false;
-
-  // 浮動名牌：把 3D 座標投影到畫面，用 HTML 呈現（文字清楚、可換字型）
-  const overlay = document.createElement("div");
-  overlay.className = "stage-tags";
-  host.appendChild(overlay);
-  interface Tag {
-    el: HTMLElement;
-    anchor: () => Vector3;
-    shown: () => boolean;
-  }
-  const tags: Tag[] = [];
-  const addTag = (text: string, cls: string, anchor: () => Vector3, shown: () => boolean = () => true): void => {
-    const el = document.createElement("span");
-    el.className = `tag3d ${cls}`;
-    el.textContent = text;
-    overlay.appendChild(el);
-    tags.push({ el, anchor, shown });
-  };
-  const above = (w: Walker, h: number) => (): Vector3 => w.p.root.position.clone().add(new Vector3(0, h + w.p.body.position.y, 0));
-  addTag("你｜水電工", "me", above(player, 2.55));
-  addTag("阿凱｜學徒", "mate", above(apprentice, 2.55), () => apprentice.p.root.visible);
-  addTag("屋主", "owner", above(owner, 2.4), () => owner.p.root.visible);
-  const fixed = (x: number, y: number, z: number) => (): Vector3 => new Vector3(x, y, z);
-  addTag("材料行", "place", fixed(-8.5, 3.9, -1));
-  addTag("貨車", "place", fixed(-6.8, 2.7, 5.3));
-  addTag("浴室", "place", fixed(6.4, 3.0, -4.6));
-  addTag("天花板夾層", "place", fixed(1.2, 4.0, -3.8));
-  const placeTags = (): void => {
-    const w = size.w;
-    const h = size.h;
-    const placed: { x: number; y: number; hw: number }[] = [];
-    for (const t of tags) {
-      const v = t.anchor().project(camera);
-      const x = (v.x * 0.5 + 0.5) * w;
-      let y = (-v.y * 0.5 + 0.5) * h;
-      const on = t.shown() && v.z < 1 && x > -40 && x < w + 40 && y > -20 && y < h + 20;
-      t.el.style.display = on ? "" : "none";
-      if (!on) continue;
-      // 名牌互相重疊時，後面的往上疊（tags 依重要性排序：玩家先）
-      const hw = t.el.offsetWidth / 2;
-      while (placed.some((p) => Math.abs(p.x - x) < p.hw + hw && Math.abs(p.y - y) < 18)) y -= 18;
-      placed.push({ x, y, hw });
-      t.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
-    }
-  };
-
-  let current: Place | null = null;
-  let active = true;
-  let progress = 0;
-  let flags: readonly string[] = [];
-  let hasEntered = false;
-  let sunNow = dayLight(0);
-  let skyNow = sunNow.sky.clone();
-  let size = { w: 0, h: 0 };
-
-  const resize = (): void => {
-    const w = host.clientWidth;
-    const h = host.clientHeight;
-    if (!w || !h || (w === size.w && h === size.h)) return;
-    size = { w, h };
-    renderer.setSize(w, h, false);
-    const halfW = 8.2;
-    const halfH = (halfW * h) / w;
-    Object.assign(camera, { left: -halfW, right: halfW, top: halfH, bottom: -halfH });
-    camera.updateProjectionMatrix();
-  };
-  const ro = new ResizeObserver(resize);
-  ro.observe(host);
-  resize();
-
-  const clock = new Clock();
-  let raf = 0;
-  const frame = (): void => {
-    raf = requestAnimationFrame(frame);
-    const dt = Math.min(clock.getDelta(), 0.05);
-    if (!active) return;
-    resize();
-    const t = clock.elapsedTime;
-    player.update(dt, t, !reduced);
-    apprentice.update(dt, t, !reduced);
-    // 學徒跟在玩家身後，進了夾層就留在樓下
-    const pp = player.p.root.position;
-    const follow = new Vector3(pp.x - 0.9, 0, pp.z + 0.7);
-    const ap = apprentice.p.root.position;
-    ap.x += (follow.x - ap.x) * Math.min(1, dt * 3);
-    ap.z += (follow.z - ap.z) * Math.min(1, dt * 3);
-    apprentice.yaw = player.yaw;
-    apprentice.route = [];
-    const apMoving = Math.hypot(follow.x - ap.x, follow.z - ap.z) > 0.15;
-    apprentice.p.body.position.y = !reduced && apMoving ? Math.abs(Math.sin(t * 11)) * 0.12 : 0;
-
-    const showLeak = !flags.includes("found_leak");
-    leak.visible = showLeak;
-    if (showLeak) {
-      for (const d of drips) {
-        const ph = reduced ? 0.3 : (t * 0.9 + (d.userData.phase as number)) % 1;
-        d.position.y = 1.75 - ph * 1.5;
-        d.visible = ph < 0.95;
-      }
-      puddle.visible = true;
-    }
-
-    // 鏡頭跟著玩家（高度只跟一半，爬上夾層時不會晃太大）
-    const want = new Vector3(Math.max(-8, Math.min(6, pp.x)), 0.8 + pp.y * 0.5, Math.max(-4, Math.min(3, pp.z)));
-    camTarget.lerp(want, reduced ? 1 : Math.min(1, dt * 3));
-    aimCamera();
-
-    const goal = dayLight(progress);
-    const k = Math.min(1, dt * 2.5);
-    sunNow.sun.lerp(goal.sun, k);
-    skyNow.lerp(goal.sky, k);
-    sunNow.intensity += (goal.intensity - sunNow.intensity) * k;
-    sun.color.copy(sunNow.sun);
-    sun.intensity = sunNow.intensity;
-    renderer.setClearColor(skyNow);
-    renderer.render(scene, camera);
-    placeTags();
-  };
-  raf = requestAnimationFrame(frame);
-
-  return {
-    setLocation(id) {
-      const next = id ? PLACES[id] : undefined;
-      if (!next) return;
-      if (next.zone !== "out" || id === "door") hasEntered = true;
-      owner.p.root.visible = hasEntered;
-      apprentice.p.root.visible = hasEntered;
-      if (!current) {
-        player.p.root.position.copy(next.pos);
-        camTarget.set(next.pos.x, 0.8 + next.pos.y * 0.5, next.pos.z);
-        apprentice.p.root.position.set(next.pos.x - 0.9, 0, next.pos.z + 0.7);
-      } else if (current !== next) {
-        if (reduced) snapTo(player, next.pos);
-        else player.route = buildRoute(current, next);
-      }
-      current = next;
-    },
-    setFlags(f) {
-      flags = f;
-    },
-    setProgress(p) {
-      progress = Math.max(0, Math.min(1, p));
-      if (!current) {
-        sunNow = dayLight(progress);
-        skyNow = sunNow.sky.clone();
-      }
-    },
-    setActive(a) {
-      active = a;
-      if (a) {
-        size = { w: 0, h: 0 };
-        clock.getDelta();
-      }
-    },
-    dispose() {
-      cancelAnimationFrame(raf);
-      ro.disconnect();
-      renderer.dispose();
-      renderer.domElement.remove();
-      overlay.remove();
-    },
-  };
-}
-
-function snapTo(w: Walker, to: Vector3): void {
-  w.p.root.position.copy(to);
-  w.route = [];
+  return createStage(host, def);
 }

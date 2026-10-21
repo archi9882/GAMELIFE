@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { careers } from "../content/index";
 import { validateCareer, type Career } from "../content/schema";
+import { hasScene, sceneLocations } from "../src/scene";
 
 describe("劇本格式驗證", () => {
   it.each(careers.map((c) => [c.id, c] as const))("%s 通過 schema 驗證", (_id, career) => {
@@ -70,5 +71,18 @@ describe("劇本格式驗證", () => {
     expect(errors.some((e) => e.includes("預設規則必須放在最後"))).toBe(true);
     expect(errors.some((e) => e.includes("label"))).toBe(true);
     expect(errors.some((e) => e.includes("最後一條必須是無條件"))).toBe(true);
+  });
+
+  it("有 3D 場景的職業：劇本地點與場景地點完全一致", () => {
+    for (const c of careers) {
+      if (!hasScene(c.id)) continue;
+      const scene = [...sceneLocations[c.id]].sort();
+      expect((c.locations ?? []).map((l) => l.id).sort()).toEqual(scene);
+      for (const e of c.events) expect(scene).toContain(e.location);
+    }
+  });
+
+  it("三個職業都有 3D 場景", () => {
+    expect(careers.filter((c) => hasScene(c.id)).length).toBe(3);
   });
 });

@@ -153,7 +153,7 @@ function updateStage(career: Career, s: GameState, e: GameEvent): void {
   scene.setActive(true);
   scene.setFlags(s.flags);
   scene.setProgress(timelineProgress(career, s));
-  scene.setLocation(e.location);
+  scene.setLocation(e.location, e.id);
   const place = career.locations?.find((l) => l.id === e.location)?.name;
   stageLabel.textContent = `${e.time}${place ? `・${place}` : ""}`;
 }

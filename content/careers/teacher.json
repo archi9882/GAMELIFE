@@ -4,6 +4,12 @@
   "intro": "你是一所公立高中的數學老師，兼任高二導師。今天是段考前兩週的星期三，課表排了四節課。",
   "dayStart": "07:30",
   "dayEnd": "17:30",
+  "locations": [
+    { "id": "classroom", "name": "教室" },
+    { "id": "office", "name": "辦公室" },
+    { "id": "counsel", "name": "輔導室" },
+    { "id": "hall", "name": "走廊" }
+  ],
   "actualAllocation": { "core": 45, "communicate": 15, "admin": 16, "wait": 4, "learn": 20 },
   "allocationSources": [
     {
@@ -24,6 +30,7 @@
     {
       "id": "t-morning",
       "time": "07:40",
+      "location": "classroom",
       "category": "core",
       "title": "早自習的手機",
       "body": "早自習鐘響後，你看到小傑還在滑手機，旁邊兩個同學也開始分心。班規寫著早自習手機要收進櫃子。",
@@ -55,6 +62,7 @@
     {
       "id": "t-class",
       "time": "08:10",
+      "location": "classroom",
       "category": "core",
       "title": "第一節：三角函數",
       "body": "講到一半，你發現後排一半的人眼神放空。照進度今天要講完這一節，下週就要開始複習段考範圍。",
@@ -81,6 +89,7 @@
     {
       "id": "t-form",
       "time": "09:20",
+      "location": "office",
       "category": "admin",
       "title": "處室的線上表單",
       "body": "教務處、學務處和輔導室今天各傳來一份填報，有的要登錄系統、有的要附佐證照片，截止都是今天。",
@@ -112,6 +121,7 @@
     {
       "id": "t-prep",
       "time": "10:15",
+      "location": "office",
       "category": "learn",
       "title": "空堂：備課還是改作業？",
       "body": "下週要帶學生做一個動手的專題單元，你還沒準備好。桌上同時有一疊兩個班的作業等著改。",
@@ -138,6 +148,7 @@
     {
       "id": "t-parent-call",
       "time": "11:10",
+      "location": "office",
       "category": "communicate",
       "title": "家長來電",
       "body": "小晴的媽媽打來，說孩子上次小考被扣分不公平，希望你重新評分，語氣很急。",
@@ -170,6 +181,7 @@
     {
       "id": "t-lunch-talk",
       "time": "12:15",
+      "location": "office",
       "category": "communicate",
       "title": "午休時的敲門聲",
       "body": "平常很安靜的阿哲來辦公室找你，說最近在家裡很難專心，不知道選組要選什麼。",
@@ -195,6 +207,7 @@
     {
       "id": "t-parent-meeting",
       "time": "13:30",
+      "location": "counsel",
       "category": "communicate",
       "title": "家長到校面談",
       "requires": ["parent_meeting"],
@@ -221,6 +234,7 @@
     {
       "id": "t-question",
       "time": "14:20",
+      "location": "classroom",
       "category": "learn",
       "title": "學生問倒你",
       "body": "數學課上，一位同學問三角函數跟聲波有什麼關係。這題超出課本，你一時答不完整。",
@@ -252,6 +266,7 @@
     {
       "id": "t-portfolio",
       "time": "15:20",
+      "location": "office",
       "category": "admin",
       "title": "學習歷程檔案認證",
       "body": "系統通知：有 12 份學生上傳的課程學習成果等你認證，期限是這週五，有些檔案說明寫得很簡略。",
@@ -277,6 +292,7 @@
     {
       "id": "t-progress",
       "time": "16:20",
+      "location": "hall",
       "category": "core",
       "title": "那張及格的考卷",
       "body": "原本說「數學放棄了」的小美，這次小考第一次及格。她拿著考卷在辦公室門口等你。",
@@ -302,6 +318,7 @@
     {
       "id": "t-makeup",
       "time": "17:00",
+      "location": "office",
       "category": "core",
       "title": "補進度的抉擇",
       "requires": ["behind_schedule"],

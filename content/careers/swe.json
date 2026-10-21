@@ -4,6 +4,13 @@
   "intro": "你是一家電商公司的後端工程師，團隊用兩週一個迭代（sprint）的方式開發。這週要上線新的結帳功能。",
   "dayStart": "09:30",
   "dayEnd": "18:30",
+  "locations": [
+    { "id": "desk", "name": "我的座位" },
+    { "id": "standup", "name": "站會區" },
+    { "id": "meeting", "name": "會議室" },
+    { "id": "pantry", "name": "茶水間" },
+    { "id": "newbie", "name": "新人座位" }
+  ],
   "actualAllocation": { "core": 50, "communicate": 39, "admin": 5, "wait": 3, "learn": 3 },
   "allocationSources": [
     {
@@ -24,6 +31,7 @@
     {
       "id": "s-standup",
       "time": "09:40",
+      "location": "standup",
       "category": "communicate",
       "title": "每日站會",
       "body": "十五分鐘的站會，每人報告昨天做了什麼、今天要做什麼、卡在哪裡。你其實卡在一個沒頭緒的問題。",
@@ -50,6 +58,7 @@
     {
       "id": "s-alert",
       "time": "10:05",
+      "location": "desk",
       "category": "core",
       "title": "線上告警",
       "body": "監控系統跳出警示：部分使用者付款失敗。今天剛好輪到你值班，訊息群組開始有人在問。",
@@ -76,6 +85,7 @@
     {
       "id": "s-postmortem",
       "time": "11:00",
+      "location": "desk",
       "category": "admin",
       "title": "事後檢討報告",
       "requires": ["hotfix"],
@@ -102,6 +112,7 @@
     {
       "id": "s-review",
       "time": "11:30",
+      "location": "desk",
       "category": "communicate",
       "title": "一個很大的 PR",
       "body": "同事送來一個改了 40 個檔案的 pull request 請你 review，他希望今天合併，好趕上這次上線。",
@@ -134,6 +145,7 @@
     {
       "id": "s-lunch",
       "time": "12:40",
+      "location": "pantry",
       "category": "learn",
       "title": "午餐技術分享",
       "body": "隔壁團隊在午餐時間分享他們怎麼導入新的測試工具。你也想趁午休安靜地吃飯放空。",
@@ -159,6 +171,7 @@
     {
       "id": "s-scope",
       "time": "13:40",
+      "location": "meeting",
       "category": "communicate",
       "title": "需求改了",
       "body": "產品經理說：老闆希望結帳頁加上分期付款選項，最好這次一起上線。距離上線只剩兩天。",
@@ -185,6 +198,7 @@
     {
       "id": "s-deepwork",
       "time": "14:40",
+      "location": "desk",
       "category": "core",
       "title": "終於可以寫程式",
       "body": "下午有一段沒有會議的時間。你打開編輯器，但測試一直失敗，錯誤訊息很不清楚。",
@@ -210,6 +224,7 @@
     {
       "id": "s-ci",
       "time": "15:50",
+      "location": "desk",
       "category": "wait",
       "title": "等待 CI",
       "body": "你推上程式碼，自動化測試要跑 25 分鐘。另一個團隊的 API 也還沒回覆你上午的問題。",
@@ -241,6 +256,7 @@
     {
       "id": "s-bug-found",
       "time": "16:30",
+      "location": "desk",
       "category": "core",
       "title": "測試環境出錯",
       "requires": ["rubber_stamp"],
@@ -267,6 +283,7 @@
     {
       "id": "s-mentor",
       "time": "17:00",
+      "location": "newbie",
       "category": "communicate",
       "title": "新人的問題",
       "body": "剛到職兩週的新人傳訊息：「可以問你一個可能很笨的問題嗎？」他不懂專案的部署流程。",
@@ -292,6 +309,7 @@
     {
       "id": "s-timesheet",
       "time": "18:10",
+      "location": "desk",
       "category": "admin",
       "title": "下班前的工單",
       "body": "專案管理系統提醒你：更新今天的工單狀態，並補上結帳功能的 API 文件。",

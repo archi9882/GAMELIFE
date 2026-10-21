@@ -153,6 +153,7 @@ input[type="range"] { width: 100%; height: 36px; accent-color: var(--accent); ma
 .tag3d.me { background: #f2c230; color: #1c1916; }
 .tag3d.mate { background: #5fae6a; color: #1c1916; }
 .tag3d.owner { background: #8fb8d4; color: #1c1916; }
+.tag3d.npc { background: #c9b8e8; color: #1c1916; }
 .tag3d.place { background: rgba(28, 25, 22, 0.72); color: #f1ebe3; font-weight: 600; }
 .gloss-hint { margin: 10px 0 0; padding: 8px 12px; border: 1px dashed var(--accent); border-radius: 10px; font-size: 0.85rem; color: var(--muted); }
 
