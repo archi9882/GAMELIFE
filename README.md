@@ -1,0 +1,26 @@
+# 職場一日
+
+讓高中生先預測一份工作的一天怎麼分配，再實際「上班」一天，對照想像與現實的落差。純前端、手機直向優先、免登入。規格見 [SPEC.md](SPEC.md)。
+
+## 執行
+```bash
+npm install
+npm run dev        # 開發伺服器
+npm test           # schema 驗證 + 全路線可達測試
+npm run build      # 產出 dist/，並另外產出單檔 dist/career-day.html
+```
+
+## 結構
+| 路徑 | 內容 |
+|---|---|
+| `content/schema.ts` | 劇本型別與 `validateCareer()`（字數、加總、來源、明顯正解、前置旗標） |
+| `content/careers/*.json` | 高中老師、軟體工程師、水電工劇本 |
+| `src/engine/` | 狀態機（預測 → 上班 → 對照 → 結算）與計分，純函式 |
+| `src/ui/` | 畫面、Canvas 結算卡、localStorage（失敗也能玩） |
+| `tests/` | 格式驗證、窮舉所有選擇路線的可達性測試 |
+| `research/` | 各職業來源查證紀錄與待查清單 |
+
+## 資料與誠信
+- **三個職業的時間比例目前都是推估**（`type: "fiction"`），遊戲對照畫面與結算卡會標示。查到的公開資料只用於定性說明，見 `research/`。
+- 事件情境全部虛構，對應公開描述的工作內容。
+- 本專案的程式、劇本與研究筆記由 AI（Claude Code）起草，需人工審閱，特別是劇本的真實性。
