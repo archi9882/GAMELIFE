@@ -331,6 +331,11 @@
       ]
     }
   ],
+  "statusBadges": [
+    { "label": "進度落後", "tone": "alert", "flags": ["behind_schedule"] },
+    { "label": "家長面談待辦", "tone": "info", "flags": ["parent_meeting"] },
+    { "label": "段考前兩週", "tone": "ok" }
+  ],
   "glossary": [
     { "term": "導師", "meaning": "負責帶一個班級的老師，除了教課，也要處理班級經營、學生生活與家長聯繫。" },
     { "term": "段考", "meaning": "學校定期舉辦的全校性正式考試，成績會算進學期成績。" },

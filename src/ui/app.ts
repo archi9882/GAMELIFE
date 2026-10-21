@@ -13,6 +13,7 @@ import {
 import {
   advance,
   choose,
+  currentBadge,
   currentEvent,
   newGame,
   normalize,
@@ -262,12 +263,14 @@ function renderPredict(career: Career, s: GameState): void {
 
 function timelineHtml(career: Career, s: GameState, now: string): string {
   const p = Math.round(timelineProgress(career, s) * 100);
+  const badge = currentBadge(career, s.flags);
+  const chip = badge ? `<span class="badge ${badge.tone}">${esc(badge.label)}</span>` : "";
   return `<div class="timeline" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100">
     <span>${esc(career.dayStart)}</span>
     <div class="track"><div class="fill" style="width:${p}%"></div><div class="dot" style="left:${p}%"></div></div>
     <span>${esc(career.dayEnd)}</span>
   </div>
-  <p class="now">${esc(now)}</p>`;
+  <p class="now">${esc(now)}${chip}</p>`;
 }
 
 function statsHtml(s: GameState): string {

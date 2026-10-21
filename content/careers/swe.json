@@ -320,6 +320,11 @@
       ]
     }
   ],
+  "statusBadges": [
+    { "label": "加班趕工中", "tone": "alert", "flags": ["overtime"] },
+    { "label": "事故處理後", "tone": "info", "flags": ["hotfix"] },
+    { "label": "迭代進行中", "tone": "ok" }
+  ],
   "glossary": [
     { "term": "站會", "meaning": "團隊每天花十幾分鐘站著開的短會，輪流報告進度和遇到的困難。" },
     { "term": "迭代", "meaning": "把開發切成固定長度的週期（常見一到兩週），每個週期交出一小批功能。" },

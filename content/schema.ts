@@ -36,6 +36,17 @@ export interface Location {
   name: string;
 }
 
+export const BADGE_TONES = ["alert", "ok", "info"] as const;
+export type BadgeTone = (typeof BADGE_TONES)[number];
+
+/** 狀態徽章：由旗標決定，依序比對，第一個符合者顯示。沒有條件的規則放最後當預設。 */
+export interface StatusBadge {
+  label: string;
+  tone: BadgeTone;
+  /** 這些旗標都已設定時才符合 */
+  flags?: string[];
+}
+
 export interface GameEvent {
   id: string;
   time: string;
@@ -69,6 +80,8 @@ export interface Career {
   categoryNotes?: Partial<Record<Category, string>>;
   /** 名詞折疊：工作中的專有名詞與一般性解釋 */
   glossary?: GlossaryTerm[];
+  /** 狀態徽章規則（選填）；最後一條應無條件，當預設 */
+  statusBadges?: StatusBadge[];
   /** 3D 場景地點；有場景的職業必填 */
   locations?: Location[];
   /** 從業者回饋預留欄位（SPEC §3.4） */
@@ -96,6 +109,7 @@ export const LIMITS = {
   effectAbsMax: 30,
   achievementMin: 2,
   glossaryMax: 80,
+  badgeMax: 10,
 } as const;
 
 /** 以 code point 計字數（中文一字算一） */
@@ -179,6 +193,17 @@ export function validateCareer(c: Career): string[] {
   }
   const locationIds = new Set((c.locations ?? []).map((l) => l.id));
   if (locationIds.size !== (c.locations ?? []).length) errors.push(at("locations 的 id 重複"));
+
+  const allSetFlags = new Set(events.flatMap((e) => (e.choices ?? []).flatMap((ch) => ch.setFlags ?? [])));
+  const badges = c.statusBadges ?? [];
+  badges.forEach((b, i) => {
+    const w = at(`statusBadges[${i}]`);
+    if (!b.label || charLen(b.label) > LIMITS.badgeMax) errors.push(`${w}: label 需 1–${LIMITS.badgeMax} 字`);
+    if (!BADGE_TONES.includes(b.tone)) errors.push(`${w}: tone 不合法 (${b.tone})`);
+    for (const f of b.flags ?? []) if (!allSetFlags.has(f)) errors.push(`${w}: 旗標 "${f}" 沒有任何選項會設定`);
+    if (i < badges.length - 1 && !(b.flags && b.flags.length)) errors.push(`${w}: 無條件的預設規則必須放在最後`);
+  });
+  if (badges.length > 0 && badges[badges.length - 1].flags?.length) errors.push(at("statusBadges 最後一條必須是無條件的預設規則"));
 
   const ids = new Set<string>();
   const flagsSetBefore = new Set<string>();

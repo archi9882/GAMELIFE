@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { careers } from "../content/index";
 import { SURPRISE_TAG, CATEGORIES, type Career } from "../content/schema";
-import { advance, choose, currentEvent, newGame, submitPrediction, type GameState } from "../src/engine/game";
+import { advance, choose, currentBadge, currentEvent, newGame, submitPrediction, type GameState } from "../src/engine/game";
 import { buildProfile, compareAllocation } from "../src/engine/scoring";
 
 /** 窮舉所有選擇路線（以 狀態 cursor+flags 去重），回傳每條走到結算的路線 */
@@ -83,5 +83,24 @@ describe("引擎行為", () => {
       s = advance(career, choose(career, s, e.id === "t-parent-call" ? 2 : 0));
     }
     expect(ids).not.toContain("t-parent-meeting");
+  });
+});
+
+describe("狀態徽章", () => {
+  it("每個職業在任何旗標組合下都有徽章（有無條件預設）", () => {
+    for (const c of careers) expect(currentBadge(c, [])).not.toBeNull();
+  });
+
+  it("依序比對，先符合者優先", () => {
+    const plumber = careers.find((c) => c.id === "plumber")!;
+    expect(currentBadge(plumber, [])?.label).toBe("漏水待查");
+    expect(currentBadge(plumber, ["found_leak"])?.label).toBe("已找到漏點");
+    expect(currentBadge(plumber, ["found_leak", "tested"])?.tone).toBe("ok");
+  });
+
+  it("水電工 p-test 的兩個選項會設定不同結果旗標", () => {
+    const plumber = careers.find((c) => c.id === "plumber")!;
+    const e = plumber.events.find((x) => x.id === "p-test")!;
+    expect(e.choices.map((ch) => ch.setFlags?.[0])).toEqual(["tested", "rushed"]);
   });
 });

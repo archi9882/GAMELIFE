@@ -286,13 +286,15 @@
           "label": "等半小時看壓力有沒有掉",
           "effects": { "time": -15, "energy": -5 },
           "traits": { "pace": -1, "achieve_make": 2 },
-          "outcome": "壓力穩定。屋主摸著乾燥的牆面說謝謝，你知道這面牆十年內不用再打開。"
+          "outcome": "壓力穩定。屋主摸著乾燥的牆面說謝謝，你知道這面牆十年內不用再打開。",
+          "setFlags": ["tested"]
         },
         {
           "label": "目視檢查沒漏就封牆",
           "effects": { "trust": -10, "time": 10 },
           "traits": { "pace": 1, "achieve_make": 1 },
-          "outcome": "提早收工，但你回家路上一直在想：那個接頭真的鎖緊了嗎？"
+          "outcome": "提早收工，但你回家路上一直在想：那個接頭真的鎖緊了嗎？",
+          "setFlags": ["rushed"]
         }
       ],
       "tags": ["成就感", "技術"],
@@ -326,6 +328,12 @@
         { "type": "fiction", "title": "虛構情境", "note": "對應勞動部技術士技能檢定「室內配線」職類（分甲、乙、丙級）；證照與承攬資格的關係待研究代理查證。" }
       ]
     }
+  ],
+  "statusBadges": [
+    { "label": "已止水・測試通過", "tone": "ok", "flags": ["tested"] },
+    { "label": "已止水・未測試", "tone": "info", "flags": ["rushed"] },
+    { "label": "已找到漏點", "tone": "info", "flags": ["found_leak"] },
+    { "label": "漏水待查", "tone": "alert" }
   ],
   "glossary": [
     { "term": "師傅", "meaning": "帶學徒、在現場負責技術判斷的資深工人。" },

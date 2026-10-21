@@ -57,4 +57,18 @@ describe("劇本格式驗證", () => {
   it("三個職業都有名詞折疊", () => {
     for (const c of careers) expect(c.glossary?.length ?? 0).toBeGreaterThanOrEqual(5);
   });
+
+  it("狀態徽章：旗標必須存在、預設規則放最後", () => {
+    const bad = structuredClone(careers[2]) as Career;
+    bad.statusBadges = [
+      { label: "預設", tone: "ok" },
+      { label: "鬼旗標", tone: "alert", flags: ["no_such_flag"] },
+      { label: "這個標籤實在是太長了超過上限", tone: "info", flags: ["found_leak"] },
+    ];
+    const errors = validateCareer(bad);
+    expect(errors.some((e) => e.includes("no_such_flag"))).toBe(true);
+    expect(errors.some((e) => e.includes("預設規則必須放在最後"))).toBe(true);
+    expect(errors.some((e) => e.includes("label"))).toBe(true);
+    expect(errors.some((e) => e.includes("最後一條必須是無條件"))).toBe(true);
+  });
 });

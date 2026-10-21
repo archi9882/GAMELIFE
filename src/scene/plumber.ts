@@ -3,14 +3,18 @@
 import {
   AmbientLight,
   BoxGeometry,
+  CanvasTexture,
   Clock,
   Color,
   DirectionalLight,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   OrthographicCamera,
   PCFSoftShadowMap,
+  PlaneGeometry,
+  SRGBColorSpace,
   Scene,
   Vector3,
   WebGLRenderer,
@@ -52,6 +56,29 @@ function box(parent: Group, w: number, h: number, d: number, color: number, x: n
   m.receiveShadow = true;
   parent.add(m);
   return m;
+}
+
+/** 貼在地面上的區名文字（中文加英文小字），朝向與相機的「螢幕右方」對齊 */
+function floorLabel(parent: Group, zh: string, en: string, x: number, y: number, z: number, width: number): void {
+  const c = document.createElement("canvas");
+  c.width = 640;
+  c.height = 200;
+  const g = c.getContext("2d")!;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillStyle = "rgba(43, 37, 32, 0.42)";
+  g.font = "bold 92px system-ui, 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif";
+  g.fillText(zh, 320, 72);
+  g.font = "600 46px system-ui, sans-serif";
+  g.fillText(en.split("").join(" "), 320, 152);
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  tex.anisotropy = 4;
+  const m = new Mesh(new PlaneGeometry(width, (width * c.height) / c.width), new MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  m.rotation.order = "YXZ";
+  m.rotation.set(-Math.PI / 2, Math.PI / 4, 0);
+  m.position.set(x, y, z);
+  parent.add(m);
 }
 
 function buildWorld(): Group {
@@ -114,6 +141,12 @@ function buildWorld(): Group {
   box(w, 0.06, 0.55, 1.4, 0x2f3a4a, -4.93, 1.0, 5.3);
   box(w, 2.62, 0.2, 1.72, 0x2b6cb0, -7.4, 0.9, 5.3);
   for (const x of [-8.1, -5.6]) for (const z of [4.4, 6.2]) box(w, 0.7, 0.7, 0.2, 0x25262b, x, 0, z);
+
+  // 地面區名
+  floorLabel(w, "客廳", "LIVING", 1.4, 0.24, -0.5, 4.4);
+  floorLabel(w, "浴室", "BATH", 6.4, 0.28, -1.2, 3.8);
+  floorLabel(w, "材料行", "SHOP", -8.4, 0.02, 1.35, 4.4);
+  floorLabel(w, "馬路", "STREET", 1.5, 0.08, 5.2, 4.4);
 
   // 樹
   for (const [x, z] of [[-3.2, -4.8], [-12.6, -6], [10, -4]] as const) {

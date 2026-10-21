@@ -6,6 +6,7 @@ import {
   type Career,
   type Category,
   type GameEvent,
+  type StatusBadge,
   type Stat,
   type Trait,
 } from "../../content/schema";
@@ -134,4 +135,9 @@ export function timelineProgress(career: Career, s: GameState): number {
   if (s.phase !== "play") return 1;
   const e = currentEvent(career, s);
   return e ? (toMin(e.time) - start) / (end - start) : 1;
+}
+
+/** 目前的狀態徽章：依序比對旗標，第一個符合者；職業沒有定義時回傳 null */
+export function currentBadge(career: Career, flags: readonly string[]): StatusBadge | null {
+  return career.statusBadges?.find((b) => (b.flags ?? []).every((f) => flags.includes(f))) ?? null;
 }
