@@ -174,13 +174,20 @@
       "time": "12:20",
       "location": "ceiling",
       "group": "noon",
+      "expire": {
+        "effects": {
+          "trust": -10,
+          "energy": -5
+        },
+        "outcome": "你忙著別的事，沒跟屋主說線路老化，只在心裡記了一筆。"
+      },
       "category": "communicate",
       "title": "老化的線路",
       "body": "天花板裡的電線外皮已經硬化龜裂，有短路風險。但這不在今天的報價範圍內。",
       "choices": [
         {
           "label": "拍照告知，建議另外報價",
-          "effects": { "time": -10, "trust": 10, "energy": -5 },
+          "effects": { "time": -20, "trust": 10, "energy": -5 },
           "traits": { "social": 1, "achieve_solve": 1 },
           "outcome": "屋主有點嚇到，但感謝你說出來，約好下週再來換線。"
         },
@@ -201,6 +208,12 @@
       "time": "12:20",
       "location": "van",
       "group": "noon",
+      "expire": {
+        "effects": {
+          "trust": -10
+        },
+        "outcome": "三個新客戶的訊息都沒回，其中兩位找了別人。"
+      },
       "category": "admin",
       "title": "車上的午餐",
       "body": "你在車上吃便當，LINE 跳出三個新客戶的訊息，都傳了照片想先問大概多少錢。",
@@ -337,6 +350,95 @@
     { "label": "已止水・未測試", "tone": "info", "flags": ["rushed"] },
     { "label": "已找到漏點", "tone": "info", "flags": ["found_leak"] },
     { "label": "漏水待查", "tone": "alert" }
+  ],
+  "deadlines": {"noon": 30},
+  "interrupts": [
+    {
+      "id": "i-p-neighbor",
+      "during": "p-leak",
+      "caller": "樓下鄰居・手機",
+      "title": "床都濕了",
+      "body": "樓下鄰居打來：「天花板還在滴水，我的床都濕了，你們到底什麼時候好？」",
+      "choices": [
+        {
+          "label": "接起來道歉，說明在找漏點",
+          "effects": {
+            "energy": -5,
+            "time": -5,
+            "trust": 10
+          },
+          "traits": {
+            "social": 1
+          },
+          "outcome": "你講了十分鐘，鄰居情緒緩和了，但你的檢查被拖慢。"
+        },
+        {
+          "label": "傳訊息說處理中，專心檢查",
+          "effects": {
+            "trust": -10,
+            "energy": 5
+          },
+          "traits": {
+            "social": -1
+          },
+          "outcome": "你很快縮小範圍，但鄰居回了一個很長的訊息，沒有表情符號。"
+        }
+      ],
+      "tags": [
+        "突發",
+        "人際"
+      ],
+      "sources": [
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應漏水案件中受影響的鄰居來電催促的常見狀況。"
+        }
+      ]
+    },
+    {
+      "id": "i-p-newcustomer",
+      "during": "p-ceiling",
+      "caller": "新客戶・手機",
+      "title": "今天能來看看嗎",
+      "body": "你在天花板裡，手機一直震動：新客戶問今天能不能先來看看，說得很急。",
+      "choices": [
+        {
+          "label": "爬下來接電話",
+          "effects": {
+            "time": -10,
+            "energy": -10,
+            "trust": 5
+          },
+          "traits": {
+            "social": 1
+          },
+          "outcome": "你灰頭土臉地講完，約好明天上午，但現在得再爬一次梯子。"
+        },
+        {
+          "label": "不接，收工後再回",
+          "effects": {
+            "trust": -10,
+            "energy": 5
+          },
+          "traits": {
+            "pace": -1
+          },
+          "outcome": "你專心把線路看完，但晚上回電時，客戶說已經找到別人了。"
+        }
+      ],
+      "tags": [
+        "突發",
+        "報價"
+      ],
+      "sources": [
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應小型工班自行接案、常在施工時被新客戶來電打斷的日常。"
+        }
+      ]
+    }
   ],
   "glossary": [
     { "term": "師傅", "meaning": "帶學徒、在現場負責技術判斷的資深工人。" },

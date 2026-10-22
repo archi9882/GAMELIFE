@@ -47,6 +47,28 @@ export interface StatusBadge {
   flags?: string[];
 }
 
+/** 來不及處理時的後果（倒數計時到了、事件還開著） */
+export interface Expire {
+  effects: Partial<Record<Stat, number>>;
+  traits?: Partial<Record<Trait, number>>;
+  outcome: string;
+  setFlags?: string[];
+}
+
+/** 事件進行中跳出來的插入事件（來電、訊息），剛好 2 個選項 */
+export interface Interrupt {
+  id: string;
+  /** 被打斷的事件 id：該事件到了畫面上時出現 */
+  during: string;
+  caller: string;
+  title: string;
+  body: string;
+  choices: Choice[];
+  tags: string[];
+  sources: Source[];
+  requires?: string[];
+}
+
 export interface GameEvent {
   id: string;
   time: string;
@@ -61,6 +83,8 @@ export interface GameEvent {
   location?: string;
   /** 同一個 group 的事件（需相鄰、time 相同）會同時開放，由玩家決定處理順序 */
   group?: string;
+  /** 有時限的群組裡必填：來不及處理的後果 */
+  expire?: Expire;
 }
 
 export interface PractitionerFeedback {
@@ -80,6 +104,10 @@ export interface Career {
   reflections: string[];
   /** 對照畫面：落差最大的一類要顯示的說明（選填，v0.1 擴充） */
   categoryNotes?: Partial<Record<Category, string>>;
+  /** 群組時限（分鐘）：{ group id: 分鐘 }。有時限的群組，所有事件都要有 expire */
+  deadlines?: Record<string, number>;
+  /** 打斷事件（來電、訊息） */
+  interrupts?: Interrupt[];
   /** 首頁職業入口上的小標籤（例如「待優化」），選填 */
   entryTag?: string;
   /** 名詞折疊：工作中的專有名詞與一般性解釋 */
@@ -104,6 +132,11 @@ export const CATEGORY_LABELS: Record<Category, string> = {
 export const SURPRISE_TAG = "意想不到";
 export const ACHIEVEMENT_TAG = "成就感";
 
+export const BASE_MINUTES = 10;
+export const TRAVEL_MINUTES = 5;
+/** 一個選項花掉的遊戲分鐘：基本 10 分鐘，加上 time 扣分 */
+export const choiceMinutes = (c: Choice): number => BASE_MINUTES + Math.max(0, -(c.effects.time ?? 0));
+
 export const LIMITS = {
   eventsMin: 8,
   eventsMax: 12,
@@ -115,6 +148,9 @@ export const LIMITS = {
   glossaryMax: 80,
   badgeMax: 10,
   entryTagMax: 6,
+  callerMax: 12,
+  deadlineMin: 15,
+  deadlineMax: 180,
 } as const;
 
 /** 以 code point 計字數（中文一字算一） */
@@ -152,6 +188,26 @@ function dominates(a: Choice, b: Choice): boolean {
   return strictlyBetter;
 }
 
+function checkChoices(choices: Choice[], w: string, errors: string[], exact?: number): void {
+  if (exact ? choices.length !== exact : choices.length < 2 || choices.length > 3) {
+    errors.push(`${w}: 選項需 ${exact ?? "2–3"} 個`);
+  }
+  choices.forEach((ch, i) => {
+    const cw = `${w} 選項${i + 1}`;
+    if (charLen(ch.label ?? "") > LIMITS.labelMax || !ch.label) errors.push(`${cw}: label 需 1–${LIMITS.labelMax} 字`);
+    if (charLen(ch.outcome ?? "") > LIMITS.outcomeMax || !ch.outcome) errors.push(`${cw}: outcome 需 1–${LIMITS.outcomeMax} 字（${charLen(ch.outcome ?? "")}）`);
+    for (const [k, v] of Object.entries(ch.effects ?? {})) {
+      if (!STATS.includes(k as Stat)) errors.push(`${cw}: 未知資源 ${k}`);
+      if (Math.abs(v as number) > LIMITS.effectAbsMax) errors.push(`${cw}: effects.${k} 超出 ±${LIMITS.effectAbsMax}`);
+    }
+    for (const k of Object.keys(ch.traits ?? {})) {
+      if (!TRAITS.includes(k as Trait)) errors.push(`${cw}: 未知特質 ${k}`);
+    }
+    if (!Object.values(ch.effects ?? {}).some((v) => (v as number) < 0)) errors.push(`${cw}: 每個選項都要有代價（至少一項資源為負）`);
+  });
+  for (const a of choices) for (const b of choices) if (a !== b && dominates(a, b)) errors.push(`${w}: 「${a.label}」全面優於「${b.label}」，形成明顯正解`);
+}
+
 /** 驗證一份劇本，回傳錯誤訊息（空陣列 = 通過） */
 export function validateCareer(c: Career): string[] {
   const errors: string[] = [];
@@ -187,6 +243,8 @@ export function validateCareer(c: Career): string[] {
 
   const allText = [
     c.intro,
+    ...(c.interrupts ?? []).flatMap((i) => [i.title, i.body, ...(i.choices ?? []).flatMap((ch) => [ch.label, ch.outcome])]),
+    ...events.map((e) => e.expire?.outcome ?? ""),
     ...events.flatMap((e) => [e.title, e.body, ...(e.choices ?? []).flatMap((ch) => [ch.label, ch.outcome])]),
   ].join("\n");
   const seenTerms = new Set<string>();
@@ -248,27 +306,58 @@ export function validateCareer(c: Career): string[] {
     }
 
     const choices = e.choices ?? [];
-    if (choices.length < 2 || choices.length > 3) errors.push(`${w}: 選項需 2–3 個`);
-    choices.forEach((ch, i) => {
-      const cw = `${w} 選項${i + 1}`;
-      if (charLen(ch.label ?? "") > LIMITS.labelMax || !ch.label) errors.push(`${cw}: label 需 1–${LIMITS.labelMax} 字`);
-      if (charLen(ch.outcome ?? "") > LIMITS.outcomeMax || !ch.outcome) errors.push(`${cw}: outcome 需 1–${LIMITS.outcomeMax} 字（${charLen(ch.outcome ?? "")}）`);
-      for (const [k, v] of Object.entries(ch.effects ?? {})) {
-        if (!STATS.includes(k as Stat)) errors.push(`${cw}: 未知資源 ${k}`);
-        if (Math.abs(v as number) > LIMITS.effectAbsMax) errors.push(`${cw}: effects.${k} 超出 ±${LIMITS.effectAbsMax}`);
-      }
-      for (const k of Object.keys(ch.traits ?? {})) {
-        if (!TRAITS.includes(k as Trait)) errors.push(`${cw}: 未知特質 ${k}`);
-      }
-      if (!Object.values(ch.effects ?? {}).some((v) => (v as number) < 0)) errors.push(`${cw}: 每個選項都要有代價（至少一項資源為負）`);
-    });
-    for (const a of choices) {
-      for (const b of choices) {
-        if (a !== b && dominates(a, b)) errors.push(`${w}: 「${a.label}」全面優於「${b.label}」，形成明顯正解`);
-      }
-    }
+    checkChoices(choices, w, errors);
     for (const ch of choices) for (const f of ch.setFlags ?? []) flagsSetBefore.add(f);
   }
+  // 打斷事件
+  const interruptIds = new Set<string>();
+  for (const i of c.interrupts ?? []) {
+    const w = at(`打斷 ${i.id}`);
+    if (ids.has(i.id) || interruptIds.has(i.id)) errors.push(`${w}: id 與其他事件或打斷重複`);
+    interruptIds.add(i.id);
+    if (!events.some((e) => e.id === i.during)) errors.push(`${w}: during "${i.during}" 不是存在的事件`);
+    if (!i.caller || charLen(i.caller) > LIMITS.callerMax) errors.push(`${w}: caller 需 1–${LIMITS.callerMax} 字`);
+    if (!i.title) errors.push(`${w}: title 必填`);
+    if (charLen(i.body ?? "") > LIMITS.bodyMax) errors.push(`${w}: body 超過 ${LIMITS.bodyMax} 字（${charLen(i.body)}）`);
+    checkSources(i.sources, w, errors);
+    checkChoices(i.choices ?? [], w, errors, 2);
+    for (const f of i.requires ?? []) if (!allSetFlags.has(f)) errors.push(`${w}: requires 的旗標 "${f}" 沒有任何選項會設定`);
+  }
+
+  // 倒數計時：時限、expire、平衡
+  const deadlines = c.deadlines ?? {};
+  for (const [g, minutes] of Object.entries(deadlines)) {
+    const w = at(`deadlines.${g}`);
+    const members = events.filter((e) => e.group === g);
+    if (members.length === 0) {
+      errors.push(`${w}: 沒有任何事件屬於這個 group`);
+      continue;
+    }
+    if (!Number.isInteger(minutes) || minutes < LIMITS.deadlineMin || minutes > LIMITS.deadlineMax) errors.push(`${w}: 需為 ${LIMITS.deadlineMin}–${LIMITS.deadlineMax} 的整數分鐘`);
+    const cost = (e: GameEvent) => (e.choices ?? []).map(choiceMinutes);
+    const minSum = members.reduce((a, e) => a + Math.min(...cost(e)), 0);
+    const maxSum = members.reduce((a, e) => a + Math.max(...cost(e)), 0);
+    // 移動只算同一群組內從一個地點走到另一個地點；同地點的事排在一起最省，所以最少要走（地點數 − 1）趟
+    const places = new Set(members.map((e) => e.location ?? ""));
+    const minTravel = TRAVEL_MINUTES * (places.size - 1);
+    if (minSum + minTravel > minutes) errors.push(`${w}: 太緊：最省時的選項加移動共需 ${minSum + minTravel} 分鐘，超過時限 ${minutes}（要有辦法做完）`);
+    if (maxSum + TRAVEL_MINUTES * (members.length - 1) <= minutes) errors.push(`${w}: 太鬆：最耗時的選項加移動最多 ${maxSum + TRAVEL_MINUTES * (members.length - 1)} 分鐘，沒超過時限 ${minutes}（要有壓力）`);
+  }
+  for (const e of events) {
+    const w = at(`事件 ${e.id}`);
+    const timed = !!e.group && e.group in deadlines;
+    if (timed && !e.expire) errors.push(`${w}: 所在群組有時限，必須有 expire`);
+    if (!timed && e.expire) errors.push(`${w}: 所在群組沒有時限，不該有 expire`);
+    if (e.expire) {
+      if (!e.expire.outcome || charLen(e.expire.outcome) > LIMITS.outcomeMax) errors.push(`${w}: expire.outcome 需 1–${LIMITS.outcomeMax} 字`);
+      for (const [k, v] of Object.entries(e.expire.effects ?? {})) {
+        if (!STATS.includes(k as Stat)) errors.push(`${w}: expire 未知資源 ${k}`);
+        if (Math.abs(v as number) > LIMITS.effectAbsMax) errors.push(`${w}: expire.effects.${k} 超出 ±${LIMITS.effectAbsMax}`);
+      }
+      if (!Object.values(e.expire.effects ?? {}).some((v) => (v as number) < 0)) errors.push(`${w}: expire 至少要有一項資源為負`);
+    }
+  }
+
   for (const [g, n] of groupSize) if (n < 2) errors.push(at(`group "${g}" 只有 ${n} 個事件，至少要 2 個`));
   return errors;
 }

@@ -114,4 +114,71 @@ describe("劇本格式驗證", () => {
   it("三個職業都有至少一個同時開放的群組", () => {
     for (const c of careers) expect(c.events.some((e) => e.group)).toBe(true);
   });
+
+  describe("打斷事件與倒數計時的驗證", () => {
+    const fresh = () => structuredClone(careers.find((c) => c.id === "teacher")!) as Career;
+
+    it("打斷事件：during 必須存在、剛好 2 個選項、caller 不可過長、兩個選項都有代價且互不全面優於", () => {
+      const c = fresh();
+      c.interrupts![0].during = "nope";
+      c.interrupts![0].caller = "這個來電者的名稱實在是太長太長了";
+      c.interrupts![0].choices.push(structuredClone(c.interrupts![0].choices[0]));
+      const errors = validateCareer(c);
+      expect(errors.some((e) => e.includes("during"))).toBe(true);
+      expect(errors.some((e) => e.includes("caller"))).toBe(true);
+      expect(errors.some((e) => e.includes("選項需 2 個"))).toBe(true);
+
+      const d = fresh();
+      d.interrupts![0].choices = [
+        { label: "好", effects: { trust: 5, time: -5 }, traits: {}, outcome: "好" },
+        { label: "壞", effects: { trust: -5, time: -10 }, traits: {}, outcome: "壞" },
+      ];
+      expect(validateCareer(d).some((e) => e.includes("明顯正解"))).toBe(true);
+    });
+
+    it("打斷事件的 id 不可與事件重複，且必須有來源", () => {
+      const c = fresh();
+      c.interrupts![0].id = c.events[0].id;
+      c.interrupts![0].sources = [];
+      const errors = validateCareer(c);
+      expect(errors.some((e) => e.includes("id 與其他事件或打斷重複"))).toBe(true);
+      expect(errors.some((e) => e.includes("sources"))).toBe(true);
+    });
+
+    it("時限：太緊（做不完）或太鬆（沒壓力）都會被擋下", () => {
+      const tight = fresh();
+      tight.deadlines!["office-morning"] = 30;
+      expect(validateCareer(tight).some((e) => e.includes("太緊"))).toBe(true);
+      const loose = fresh();
+      loose.deadlines!["office-morning"] = 150;
+      expect(validateCareer(loose).some((e) => e.includes("太鬆"))).toBe(true);
+    });
+
+    it("時限指向不存在的群組會被擋下", () => {
+      const c = fresh();
+      c.deadlines!["ghost"] = 40;
+      expect(validateCareer(c).some((e) => e.includes("沒有任何事件屬於這個 group"))).toBe(true);
+    });
+
+    it("有時限的群組必須有 expire；沒有時限的群組不該有；expire 要有代價", () => {
+      const missing = fresh();
+      delete missing.events.find((e) => e.id === "t-prep")!.expire;
+      expect(validateCareer(missing).some((e) => e.includes("必須有 expire"))).toBe(true);
+
+      const extra = fresh();
+      extra.events[0].expire = { effects: { trust: -5 }, outcome: "x" };
+      expect(validateCareer(extra).some((e) => e.includes("不該有 expire"))).toBe(true);
+
+      const free = fresh();
+      free.events.find((e) => e.id === "t-prep")!.expire = { effects: { trust: 5 }, outcome: "沒代價" };
+      expect(validateCareer(free).some((e) => e.includes("expire 至少要有一項資源為負"))).toBe(true);
+    });
+
+    it("三個職業都有打斷事件與至少一個有時限的群組", () => {
+      for (const c of careers) {
+        expect(c.interrupts?.length ?? 0).toBeGreaterThanOrEqual(2);
+        expect(Object.keys(c.deadlines ?? {}).length).toBeGreaterThanOrEqual(1);
+      }
+    });
+  });
 });

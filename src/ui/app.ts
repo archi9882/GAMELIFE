@@ -7,16 +7,23 @@ import {
   type Category,
   type GameEvent,
   type GlossaryTerm,
+  type Interrupt,
   type Source,
   type Stat,
 } from "../../content/schema";
 import {
+  ackExpired,
   advance,
   choose,
+  chooseInterrupt,
+  clockMinutes,
   currentBadge,
   currentEvent,
+  currentInterrupt,
+  formatClock,
   newGame,
   openEvents,
+  remainingMinutes,
   selectEvent,
   normalize,
   submitPrediction,
@@ -194,7 +201,7 @@ function updateStage(career: Career, s: GameState, e: GameEvent | null): void {
       if (target && state) setState(selectEvent(career, state, target.id));
     },
   );
-  stageLabel.textContent = e ? `${e.time}${placeName(e.location) ? `・${placeName(e.location)}` : ""}` : `${open[0]?.time ?? ""}・${open.length} 件待辦`;
+  stageLabel.textContent = e ? `${timeLabel(career, s, e.time)}${placeName(e.location) ? `・${placeName(e.location)}` : ""}` : `${open[0] ? timeLabel(career, s, open[0].time) : ""}・${open.length} 件待辦`;
 }
 
 function render(): void {
@@ -204,6 +211,7 @@ function render(): void {
   }
   const career = getCareer(state.careerId)!;
   if (state.phase !== "play") leaveStage(false);
+  if (state.expired?.length && (state.phase === "play" || state.phase === "compare")) return renderExpired(career, state);
   switch (state.phase) {
     case "predict":
       return renderPredict(career, state);
@@ -341,6 +349,19 @@ function renderPredict(career: Career, s: GameState): void {
   });
 }
 
+/** 畫面上的時間：有時限的群組是「群組起始 + 已花費分鐘」，否則是事件原本的時間 */
+function timeLabel(career: Career, s: GameState, fallback: string): string {
+  const c = clockMinutes(career, s);
+  return c === null ? fallback : formatClock(c);
+}
+
+function timerChip(career: Career, s: GameState): string {
+  const left = remainingMinutes(career, s);
+  if (left === null) return "";
+  const shown = Math.max(0, left);
+  return `<span class="badge ${left <= 15 ? "alert" : "info"}" role="timer" aria-label="剩 ${shown} 分鐘">剩 ${shown} 分</span>`;
+}
+
 function timelineHtml(career: Career, s: GameState, now: string): string {
   const p = Math.round(timelineProgress(career, s) * 100);
   const badge = currentBadge(career, s.flags);
@@ -350,7 +371,7 @@ function timelineHtml(career: Career, s: GameState, now: string): string {
     <div class="track"><div class="fill" style="width:${p}%"></div><div class="dot" style="left:${p}%"></div></div>
     <span>${esc(career.dayEnd)}</span>
   </div>
-  <p class="now">${esc(now)}${chip}</p>`;
+  <p class="now">${esc(now)}${timerChip(career, s)}${chip}</p>`;
 }
 
 function statsHtml(s: GameState): string {
@@ -380,8 +401,10 @@ function renderPlay(career: Career, s: GameState): void {
     return renderQuestBoard(career, s, open);
   }
   updateStage(career, s, e);
-  const head = `${backButton()}${timelineHtml(career, s, `${e.time}・${CATEGORY_LABELS[e.category]}`)}${statsHtml(s)}`;
+  const head = `${backButton()}${timelineHtml(career, s, `${timeLabel(career, s, e.time)}・${CATEGORY_LABELS[e.category]}`)}${statsHtml(s)}`;
   if (!s.pendingOutcome && scene && e.location && !scene.at(e.location)) return renderTravel(career, s, e, head);
+  const itr = currentInterrupt(career, s);
+  if (itr) return renderInterrupt(career, s, itr, head);
   if (s.pendingOutcome) {
     const ch = e.choices[s.pendingOutcome.choiceIndex];
     root.innerHTML = `
@@ -435,11 +458,80 @@ function renderPlay(career: Career, s: GameState): void {
   bindTerms();
 }
 
+/** 打斷事件（來電、訊息）：事件到了畫面上時先跳出來，回應完才回到原本的事件 */
+function renderInterrupt(career: Career, s: GameState, itr: Interrupt, head: string): void {
+  const po = s.pendingOutcome;
+  if (po?.interrupt) {
+    const ch = itr.choices[po.choiceIndex];
+    root.innerHTML = `
+      <main class="screen play">
+        ${head}
+        <article class="card call done">
+          <p class="kicker">來電・${esc(itr.caller)}</p>
+          <p class="muted">你選了：${esc(ch.label)}</p>
+          <p class="outcome">${annotate(ch.outcome, career)}</p>
+          <div class="deltas">${deltaHtml(ch.effects)}</div>
+        </article>
+        ${glossFor(career, [ch.label, ch.outcome])}
+        <button class="primary" id="next">繼續</button>
+      </main>`;
+    root.querySelector("#next")!.addEventListener("click", () => setState(advance(career, s)));
+    bindBack();
+    bindTerms();
+    return;
+  }
+  root.innerHTML = `
+    <main class="screen play">
+      ${head}
+      <article class="card call">
+        <p class="kicker"><span class="ring" aria-hidden="true"></span>來電・${esc(itr.caller)}</p>
+        <h2>${annotate(itr.title, career)}</h2>
+        <p>${annotate(itr.body, career)}</p>
+      </article>
+      <div class="choices">
+        ${itr.choices.map((c, i) => `<button class="choice" data-i="${i}">${esc(c.label)}</button>`).join("")}
+      </div>
+      ${glossFor(career, [itr.title, itr.body, ...itr.choices.map((c) => c.label)])}
+      <details class="src"><summary>這個情境的依據</summary>${sourcesHtml(itr.sources)}</details>
+    </main>`;
+  root.querySelectorAll<HTMLButtonElement>(".choice").forEach((b) =>
+    b.addEventListener("click", () => setState(chooseInterrupt(career, s, Number(b.dataset.i)))),
+  );
+  bindBack();
+  bindTerms();
+}
+
+/** 時間到：其餘還開著的事件來不及處理，逐件說明後果 */
+function renderExpired(career: Career, s: GameState): void {
+  if (s.phase === "play") updateStage(career, s, null);
+  const items = (s.expired ?? []).map((id) => career.events.find((e) => e.id === id)).filter((e): e is GameEvent => !!e);
+  root.innerHTML = `
+    <main class="screen play">
+      ${backButton()}
+      <p class="kicker">時間到</p>
+      <h1>有 ${items.length} 件事來不及</h1>
+      <p class="muted">同時有太多事，沒辦法每件都處理。</p>
+      ${items
+        .map(
+          (e) => `<article class="card expired">
+            <h2>${esc(e.title)}</h2>
+            <p>${esc(e.expire?.outcome ?? "")}</p>
+            <div class="deltas">${deltaHtml(e.expire?.effects ?? {})}</div>
+          </article>`,
+        )
+        .join("")}
+      ${statsHtml(s)}
+      <button class="primary" id="ack-expired">繼續</button>
+    </main>`;
+  bindBack();
+  root.querySelector("#ack-expired")!.addEventListener("click", () => setState(ackExpired(s)));
+}
+
 /** 同時有好幾件待辦：由玩家決定先做哪一件 */
 function renderQuestBoard(career: Career, s: GameState, open: GameEvent[]): void {
   updateStage(career, s, null);
   const placeName = (id: string | undefined) => career.locations?.find((l) => l.id === id)?.name;
-  const head = `${backButton()}${timelineHtml(career, s, `${open[0].time}・${open.length} 件待辦`)}${statsHtml(s)}`;
+  const head = `${backButton()}${timelineHtml(career, s, `${timeLabel(career, s, open[0].time)}・${open.length} 件待辦`)}${statsHtml(s)}`;
   root.innerHTML = `
     <main class="screen play">
       ${head}

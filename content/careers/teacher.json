@@ -91,6 +91,12 @@
       "time": "09:20",
       "location": "office",
       "group": "office-morning",
+      "expire": {
+        "effects": {
+          "trust": -15
+        },
+        "outcome": "表單超過期限，組長親自來問你，語氣客氣但明顯不高興。"
+      },
       "category": "admin",
       "title": "處室的線上表單",
       "body": "教務處、學務處和輔導室今天各傳來一份填報，有的要登錄系統、有的要附佐證照片，截止都是今天。",
@@ -124,6 +130,13 @@
       "time": "09:20",
       "location": "office",
       "group": "office-morning",
+      "expire": {
+        "effects": {
+          "trust": -5,
+          "energy": -5
+        },
+        "outcome": "備課沒做完，晚上回家還得補，作業也沒發回去。"
+      },
       "category": "learn",
       "title": "空堂：備課還是改作業？",
       "body": "下週要帶學生做一個動手的專題單元，你還沒準備好。桌上同時有一疊兩個班的作業等著改。",
@@ -152,6 +165,12 @@
       "time": "09:20",
       "location": "office",
       "group": "office-morning",
+      "expire": {
+        "effects": {
+          "trust": -15
+        },
+        "outcome": "你沒接到家長的電話，對方留了言，語氣很急。"
+      },
       "category": "communicate",
       "title": "家長來電",
       "body": "小晴的媽媽打來，說孩子上次小考被扣分不公平，希望你重新評分，語氣很急。",
@@ -186,13 +205,19 @@
       "time": "12:15",
       "location": "office",
       "group": "noon",
+      "expire": {
+        "effects": {
+          "trust": -15
+        },
+        "outcome": "阿哲在辦公室外站了一會兒，沒等到你，默默走了。"
+      },
       "category": "communicate",
       "title": "午休時的敲門聲",
       "body": "平常很安靜的阿哲來辦公室找你，說最近在家裡很難專心，不知道選組要選什麼。",
       "choices": [
         {
           "label": "放下便當陪他聊",
-          "effects": { "energy": -15, "time": -10, "trust": 15 },
+          "effects": { "energy": -15, "time": -20, "trust": 15 },
           "traits": { "social": 1, "achieve_people": 2 },
           "outcome": "聊到午休結束，他離開時說「謝謝老師」，那是你今天最踏實的時刻。"
         },
@@ -213,6 +238,12 @@
       "time": "12:15",
       "location": "counsel",
       "group": "noon",
+      "expire": {
+        "effects": {
+          "trust": -20
+        },
+        "outcome": "家長在輔導室等不到人，自己離開了。"
+      },
       "category": "communicate",
       "title": "家長到校面談",
       "requires": ["parent_meeting"],
@@ -273,6 +304,12 @@
       "time": "15:20",
       "location": "office",
       "group": "afternoon",
+      "expire": {
+        "effects": {
+          "trust": -10
+        },
+        "outcome": "認證沒趕上這週五的期限，學生的檔案卡住了。"
+      },
       "category": "admin",
       "title": "學習歷程檔案認證",
       "body": "系統通知：有 12 份學生上傳的課程學習成果等你認證，期限是這週五，有些檔案說明寫得很簡略。",
@@ -300,6 +337,13 @@
       "time": "15:20",
       "location": "hall",
       "group": "afternoon",
+      "expire": {
+        "effects": {
+          "trust": -10,
+          "energy": -5
+        },
+        "outcome": "小美在門口等了很久，把考卷收回書包。你錯過了她最開心的時刻。"
+      },
       "category": "core",
       "title": "那張及格的考卷",
       "body": "原本說「數學放棄了」的小美，這次小考第一次及格。她拿著考卷在辦公室門口等你。",
@@ -327,6 +371,13 @@
       "time": "15:20",
       "location": "office",
       "group": "afternoon",
+      "expire": {
+        "effects": {
+          "time": -10,
+          "trust": -5
+        },
+        "outcome": "補進度的事沒有著落，只好壓縮之後的複習課。"
+      },
       "category": "core",
       "title": "補進度的抉擇",
       "requires": ["behind_schedule"],
@@ -355,6 +406,95 @@
     { "label": "進度落後", "tone": "alert", "flags": ["behind_schedule"] },
     { "label": "家長面談待辦", "tone": "info", "flags": ["parent_meeting"] },
     { "label": "段考前兩週", "tone": "ok" }
+  ],
+  "deadlines": {"office-morning": 50, "noon": 30, "afternoon": 50},
+  "interrupts": [
+    {
+      "id": "i-t-attendance",
+      "during": "t-class",
+      "caller": "學務處・分機",
+      "title": "請馬上回報缺席名單",
+      "body": "上課到一半，學務處來電：「今天的缺席登記還沒交，生教組在等。」全班正在做練習。",
+      "choices": [
+        {
+          "label": "停下來接，報完名單",
+          "effects": {
+            "time": -10,
+            "trust": 5,
+            "energy": -5
+          },
+          "traits": {
+            "pace": 1
+          },
+          "outcome": "你請同學先自習，五分鐘報完。回到課堂時，大家的專注已經散了。"
+        },
+        {
+          "label": "讓它響，下課再回",
+          "effects": {
+            "time": 5,
+            "trust": -10
+          },
+          "traits": {
+            "pace": -1
+          },
+          "outcome": "課堂沒被打斷，但下課後生教組的語氣明顯不太客氣。"
+        }
+      ],
+      "tags": [
+        "突發",
+        "行政"
+      ],
+      "sources": [
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應學校行政處室在上課時間來電催辦的日常。"
+        }
+      ]
+    },
+    {
+      "id": "i-t-gate",
+      "during": "t-question",
+      "caller": "警衛室・分機",
+      "title": "有家長在校門口",
+      "body": "警衛室來電：有位家長沒預約，在校門口說要見你。你正在回答學生的問題。",
+      "choices": [
+        {
+          "label": "請警衛先帶他去辦公室等",
+          "effects": {
+            "energy": -5,
+            "time": -5,
+            "trust": 5
+          },
+          "traits": {
+            "social": 1
+          },
+          "outcome": "家長在辦公室等了二十分鐘，下課後你趕過去，他的火氣已經小了一點。"
+        },
+        {
+          "label": "請警衛轉告改天預約",
+          "effects": {
+            "trust": -15,
+            "energy": 5
+          },
+          "traits": {
+            "social": -1
+          },
+          "outcome": "家長悻悻然離開。你保住了課堂，但之後的聯絡簿上多了一行抱怨。"
+        }
+      ],
+      "tags": [
+        "突發",
+        "人際"
+      ],
+      "sources": [
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應校園警衛室通報訪客的流程；情境虛構。"
+        }
+      ]
+    }
   ],
   "glossary": [
     { "term": "導師", "meaning": "負責帶一個班級的老師，除了教課，也要處理班級經營、學生生活與家長聯繫。" },

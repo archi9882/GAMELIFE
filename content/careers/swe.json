@@ -87,6 +87,12 @@
       "time": "11:00",
       "location": "desk",
       "group": "late-morning",
+      "expire": {
+        "effects": {
+          "trust": -10
+        },
+        "outcome": "事故檢討沒趕上週會，主管問了好幾個你答不出的細節。"
+      },
       "category": "admin",
       "title": "事後檢討報告",
       "requires": ["hotfix"],
@@ -115,6 +121,12 @@
       "time": "11:00",
       "location": "desk",
       "group": "late-morning",
+      "expire": {
+        "effects": {
+          "trust": -15
+        },
+        "outcome": "同事等不到你的 review，只好自己合併。"
+      },
       "category": "communicate",
       "title": "一個很大的 PR",
       "body": "同事送來一個改了 40 個檔案的 pull request 請你 review，他希望今天合併，好趕上這次上線。",
@@ -149,6 +161,12 @@
       "time": "12:40",
       "location": "pantry",
       "group": "noon",
+      "expire": {
+        "effects": {
+          "energy": -10
+        },
+        "outcome": "午餐被會議吃掉了，你只匆匆咬了幾口麵包。"
+      },
       "category": "learn",
       "title": "午餐技術分享",
       "body": "隔壁團隊在午餐時間分享他們怎麼導入新的測試工具。你也想趁午休安靜地吃飯放空。",
@@ -176,13 +194,19 @@
       "time": "12:40",
       "location": "meeting",
       "group": "noon",
+      "expire": {
+        "effects": {
+          "trust": -15
+        },
+        "outcome": "產品經理沒等到你的回覆，自己向老闆答應了分期付款。"
+      },
       "category": "communicate",
       "title": "需求改了",
       "body": "產品經理說：老闆希望結帳頁加上分期付款選項，最好這次一起上線。距離上線只剩兩天。",
       "choices": [
         {
           "label": "評估後說明需要延期",
-          "effects": { "time": -10, "trust": -5, "energy": -5 },
+          "effects": { "time": -20, "trust": -5, "energy": -5 },
           "traits": { "social": 1, "achieve_solve": 1 },
           "outcome": "你列出影響範圍，最後決定下次迭代再做。會議開了快一小時。"
         },
@@ -262,6 +286,12 @@
       "time": "16:30",
       "location": "desk",
       "group": "evening",
+      "expire": {
+        "effects": {
+          "trust": -15
+        },
+        "outcome": "測試環境壞了一整晚，隔天早上才有人發現。"
+      },
       "category": "core",
       "title": "測試環境出錯",
       "requires": ["rubber_stamp"],
@@ -290,6 +320,12 @@
       "time": "16:30",
       "location": "newbie",
       "group": "evening",
+      "expire": {
+        "effects": {
+          "trust": -15
+        },
+        "outcome": "新人卡了一個晚上，隔天才好意思再開口問。"
+      },
       "category": "communicate",
       "title": "新人的問題",
       "body": "剛到職兩週的新人傳訊息：「可以問你一個可能很笨的問題嗎？」他不懂專案的部署流程。",
@@ -317,6 +353,12 @@
       "time": "16:30",
       "location": "desk",
       "group": "evening",
+      "expire": {
+        "effects": {
+          "trust": -5
+        },
+        "outcome": "文件沒補，前端同事晚上傳訊息問你參數的意思。"
+      },
       "category": "admin",
       "title": "下班前的工單",
       "body": "專案管理系統提醒你：更新今天的工單狀態，並補上結帳功能的 API 文件。",
@@ -344,6 +386,95 @@
     { "label": "加班趕工中", "tone": "alert", "flags": ["overtime"] },
     { "label": "事故處理後", "tone": "info", "flags": ["hotfix"] },
     { "label": "迭代進行中", "tone": "ok" }
+  ],
+  "deadlines": {"late-morning": 30, "noon": 30, "evening": 50},
+  "interrupts": [
+    {
+      "id": "i-s-support",
+      "during": "s-alert",
+      "caller": "客服主管・分機",
+      "title": "客人一直打來",
+      "body": "客服主管來電：「已經有三位客人說付款失敗，我能跟他們說什麼？」你正在看錯誤紀錄。",
+      "choices": [
+        {
+          "label": "簡短回報目前進度",
+          "effects": {
+            "time": -5,
+            "energy": -5,
+            "trust": 10
+          },
+          "traits": {
+            "social": 1
+          },
+          "outcome": "你用兩句話講完現況，客服有東西可以回覆客人，但你的思路被打斷了。"
+        },
+        {
+          "label": "請他先看狀態頁，專心修復",
+          "effects": {
+            "trust": -10,
+            "time": 5
+          },
+          "traits": {
+            "social": -1
+          },
+          "outcome": "你很快找到線索，客服主管掛電話時明顯有點無奈。"
+        }
+      ],
+      "tags": [
+        "突發",
+        "人際"
+      ],
+      "sources": [
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應線上服務事故時，客服與工程團隊之間的資訊落差。"
+        }
+      ]
+    },
+    {
+      "id": "i-s-pm",
+      "during": "s-deepwork",
+      "caller": "產品經理・語音",
+      "title": "五分鐘就好",
+      "body": "產品經理傳來語音邀請：「你有五分鐘嗎？老闆想看新結帳頁的畫面。」你剛進入專注狀態。",
+      "choices": [
+        {
+          "label": "接起來，邊說邊給他看",
+          "effects": {
+            "time": -10,
+            "energy": -10,
+            "trust": 10
+          },
+          "traits": {
+            "social": 1
+          },
+          "outcome": "五分鐘變成二十分鐘。老闆滿意了，你的除錯得從頭再找回感覺。"
+        },
+        {
+          "label": "回「半小時後」，繼續除錯",
+          "effects": {
+            "trust": -5,
+            "energy": 5
+          },
+          "traits": {
+            "social": -1
+          },
+          "outcome": "你把問題解掉，但產品經理的回覆只有一個「好」。"
+        }
+      ],
+      "tags": [
+        "突發",
+        "專注"
+      ],
+      "sources": [
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應開發者常被臨時需求打斷專注時間（Meyer 等 2021 提到打斷在開發期特別不利）。"
+        }
+      ]
+    }
   ],
   "glossary": [
     { "term": "站會", "meaning": "團隊每天花十幾分鐘站著開的短會，輪流報告進度和遇到的困難。" },
