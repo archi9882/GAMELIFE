@@ -2,7 +2,7 @@
 import { Group, Vector3 } from "three";
 import type { SceneHandle } from "./index";
 import type { Rect } from "./nav";
-import { box, createStage, floorLabel, type Place, type SceneDef } from "./kit";
+import { box, castOf, createStage, floorLabel, type Place, type SceneDef } from "./kit";
 
 const P = (x: number, y: number, z: number, zone: string): Place => ({ pos: new Vector3(x, y, z), zone });
 
@@ -152,6 +152,7 @@ const def: SceneDef = {
 };
 
 export const TEACHER_PLACE_IDS = Object.keys(PLACES);
+export const TEACHER_CAST = castOf(def);
 
 export function createTeacherScene(host: HTMLElement): SceneHandle | null {
   return createStage(host, def);

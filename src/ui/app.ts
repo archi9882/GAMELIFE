@@ -38,11 +38,12 @@ import {
 import { mergeSeen, progress, type Codex } from "../engine/codex";
 import { splitPages } from "../engine/text";
 import { allocationIsEstimate, buildProfile, compareAllocation } from "../engine/scoring";
-import { createScene, hasScene, type SceneHandle } from "../scene";
+import { createScene, hasScene, sceneCast, type SceneHandle } from "../scene";
 import { drawCard } from "./card";
-import { load, loadAutoWalk, loadCodex, save, saveAutoWalk, saveCodex } from "./storage";
+import { load, loadAutoWalk, loadCodex, loadName, NAME_MAX, save, saveAutoWalk, saveCodex, saveName } from "./storage";
 
 const DISCLAIMER = "情境為虛構，比例依據見來源。";
+const NOT_A_TEST = "這不是職業測驗，不會告訴你「適合」什麼。";
 const STAT_LABELS: Record<Stat, string> = { energy: "精力", time: "時間", trust: "信任" };
 
 const esc = (s: string): string =>
@@ -140,6 +141,10 @@ let dpadEl: HTMLElement;
 let scene: SceneHandle | null = null;
 let sceneCareerId: string | null = null;
 let state: GameState | null = null;
+/** 選單上選中的職業（只在這次開啟期間記住） */
+let homeCareerId: string = careers[0].id;
+/** 玩家名字（可不填），存在 career-day:name:v1 */
+let playerName = "";
 let draft: Record<Category, number> | null = null;
 
 function setState(s: GameState | null): void {
@@ -147,6 +152,7 @@ function setState(s: GameState | null): void {
   save(s);
   render();
   window.scrollTo(0, 0);
+  root.scrollTop = 0;
 }
 
 export function mount(el: HTMLElement): void {
@@ -167,7 +173,9 @@ export function mount(el: HTMLElement): void {
   bindDpad();
   bindFullscreen(el.querySelector<HTMLButtonElement>("#fs-toggle")!);
   root = el.querySelector("#ui")!;
+  window.addEventListener("resize", applyInsets);
   codex = loadCodex();
+  playerName = loadName();
   autoWalk = loadAutoWalk();
   const saved = load();
   state = saved && getCareer(saved.careerId) && Array.isArray(saved.done) && Array.isArray(saved.inspected) ? saved : null;
@@ -247,70 +255,133 @@ function setWalkUi(on: boolean): void {
   }
 }
 
-// ── 全螢幕（沉浸模式）────────────────────────────────
-// 能用瀏覽器全螢幕的（桌機、Android）就用；iPhone Safari 不支援網頁元素全螢幕，
-// 所以一律套用沉浸模式：場景鋪滿畫面，事件與按鈕放在下方可捲動的面板。
-let immersive = false;
+// ── 版面：場景常駐背景＋浮動卡片 ─────────────────────
+// 場景一直鋪滿畫面（position: fixed）。選單、預測、對照、結算是「卡片」版面：場景霧化、鏡頭慢慢環繞，
+// 卡片在桌機靠左、手機在中央偏下，頁面可捲動。遊玩是「面板」版面：場景清楚可走動，
+// 面板在手機是下方可捲動的面板（46dvh）、桌機是左側浮動卡片。
+// 「全螢幕」按鈕只切換瀏覽器原生全螢幕；不支援的瀏覽器（例如 iPhone Safari）隱藏按鈕。
+type Layout = "card" | "play";
+let layout: Layout = "card";
 let fsButton: HTMLButtonElement;
+/** 場景是為哪個畫面建的：home（選單展示用、狀態乾淨）或 game（遊戲中，角色位置與旗標會變） */
+let sceneMode: "home" | "game" | null = null;
 
-/** 下方面板的高度（px），與 CSS 的 46dvh 一致 */
-const panelHeight = (): number => Math.round(window.innerHeight * 0.46);
+const DESKTOP = "(min-width: 900px)";
+const isDesktop = (): boolean => window.matchMedia?.(DESKTOP).matches ?? false;
+/** 桌機左側卡片／面板的右緣（px），與 CSS 一致：左距 16 + 寬 520 + 間隔 16 */
+const DESKTOP_PANEL_EDGE = 552;
 
-function setImmersive(on: boolean): void {
-  immersive = on;
-  document.body.classList.toggle("immersive", on);
+/** 依版面告訴場景哪裡被蓋住，讓鏡頭把角色放在看得到的範圍 */
+function applyInsets(): void {
+  if (!scene) return;
+  if (isDesktop()) scene.setInsets({ left: DESKTOP_PANEL_EDGE, bottom: 0 });
+  else if (layout === "play") scene.setInsets({ bottom: Math.round(window.innerHeight * 0.46), left: 0 });
+  else scene.setInsets({ bottom: Math.round(window.innerHeight * 0.6), left: 0 });
+}
+
+function setLayout(next: Layout): void {
+  layout = next;
+  const hasStage = !stageEl.hidden;
+  document.body.classList.toggle("layout-play", next === "play" && hasStage);
+  document.body.classList.toggle("layout-card", !(next === "play" && hasStage));
+  document.body.classList.toggle("has-scene", hasStage);
+  applyInsets();
+}
+
+const fsSupported = (): boolean => !!document.documentElement.requestFullscreen && document.fullscreenEnabled !== false;
+
+function syncFsButton(): void {
+  const on = !!document.fullscreenElement;
   fsButton.textContent = on ? "結束全螢幕" : "全螢幕";
   fsButton.setAttribute("aria-pressed", String(on));
-  scene?.setBottomInset(on ? panelHeight() : 0);
-  if (on) {
-    document.documentElement.requestFullscreen?.().catch(() => undefined);
-  } else if (document.fullscreenElement) {
-    document.exitFullscreen?.().catch(() => undefined);
-  }
 }
 
 function bindFullscreen(btn: HTMLButtonElement): void {
   fsButton = btn;
-  btn.addEventListener("click", () => setImmersive(!immersive));
-  // 使用者用瀏覽器的方式（Esc）離開全螢幕時，一起離開沉浸模式
-  document.addEventListener("fullscreenchange", () => {
-    if (!document.fullscreenElement && immersive) setImmersive(false);
+  if (!fsSupported()) {
+    btn.hidden = true;
+    return;
+  }
+  btn.addEventListener("click", () => {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => undefined);
+      else document.documentElement.requestFullscreen?.().catch(() => undefined);
+    } catch {
+      /* 不支援就略過 */
+    }
   });
-  window.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape" && immersive) setImmersive(false);
-  });
-  window.addEventListener("resize", () => {
-    if (immersive) scene?.setBottomInset(panelHeight());
-  });
+  document.addEventListener("fullscreenchange", syncFsButton);
+  syncFsButton();
 }
 
-function leaveStage(dispose: boolean): void {
-  if (immersive) setImmersive(false);
+function exitFullscreen(): void {
+  try {
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => undefined);
+  } catch {
+    /* 略過 */
+  }
+}
+
+function disposeScene(): void {
+  walking = false;
+  setWalkUi(false);
+  scene?.dispose();
+  scene = null;
+  sceneCareerId = null;
+  sceneMode = null;
+}
+
+/**
+ * 取得這個職業的場景：職業不同就換；從遊戲回到選單時重建（遊戲中的位置與旗標不帶回選單）。
+ * 選單建好的場景還沒被動過，開始這一天時直接沿用。
+ */
+function ensureScene(careerId: string, mode: "home" | "game"): SceneHandle | null {
+  const reusable = scene && sceneCareerId === careerId && (sceneMode === mode || (sceneMode === "home" && mode === "game"));
+  if (reusable) {
+    sceneMode = mode;
+    return scene;
+  }
+  if (sceneCareerId !== null || scene) disposeScene();
+  if (!hasScene(careerId)) return null;
+  scene = createScene(careerId, stageHost);
+  sceneCareerId = careerId;
+  sceneMode = mode;
+  scene?.setPlayerName(playerName);
+  return scene;
+}
+
+/** 卡片畫面的背景：同一個職業的場景，霧化＋展示模式；沒有場景時退回純卡片 */
+function showBackdrop(career: Career, mode: "home" | "game", progress: number): void {
   setWalkUi(false);
   stageActions.replaceChildren();
-  stageEl.hidden = true;
-  scene?.setActive(false);
-  if (dispose) {
-    walking = false;
-    scene?.dispose();
-    scene = null;
-    sceneCareerId = null;
+  stageLabel.textContent = "";
+  exitFullscreen();
+  const sc = ensureScene(career.id, mode);
+  stageEl.hidden = !sc;
+  if (sc) {
+    sc.setActive(true);
+    sc.setShowcase(true);
+    sc.setGoals([]);
+    sc.setFlags(state && mode === "game" ? state.flags : []);
+    sc.setProgress(progress);
+    const first = career.events[0];
+    if (first?.location) sc.place(first.location);
   }
+  setLayout("card");
 }
 
 /** 遊玩畫面上方的 3D 場景；沒有場景或不支援 WebGL 時隱藏，退回純卡片 */
 function updateStage(career: Career, s: GameState, e: GameEvent | null, walk = true): void {
-  if (!hasScene(career.id)) return leaveStage(false);
-  stageEl.hidden = false;
-  if (!scene || sceneCareerId !== career.id) {
-    scene?.dispose();
-    scene = createScene(career.id, stageHost);
-    sceneCareerId = career.id;
-  }
+  ensureScene(career.id, "game");
+  stageEl.hidden = !scene;
   if (!scene) {
-    stageEl.hidden = true;
+    setWalkUi(false);
+    stageActions.replaceChildren();
+    setLayout("card");
     return;
   }
+  setLayout("play");
+  scene.setShowcase(false);
   const open = openEvents(career, s);
   const shown = new Set(open.map((o) => o.id));
   if (e) shown.add(e.id);
@@ -370,13 +441,15 @@ function updateStage(career: Career, s: GameState, e: GameEvent | null, walk = t
   stageLabel.textContent = e ? `${timeLabel(career, s, e.time)}${placeName(e.location) ? `・${placeName(e.location)}` : ""}` : `${open[0] ? timeLabel(career, s, open[0].time) : ""}・${open.length} 件待辦`;
 }
 
+const homeCareer = (): Career => getCareer(homeCareerId) ?? careers[0];
+
 function render(): void {
   if (!state) {
-    leaveStage(true);
+    showBackdrop(homeCareer(), "home", 0);
     return codexOpen ? renderCodex() : renderHome();
   }
   const career = getCareer(state.careerId)!;
-  if (state.phase !== "play") leaveStage(false);
+  if (state.phase !== "play") showBackdrop(career, "game", timelineProgress(career, state));
   if (state.expired?.length && (state.phase === "play" || state.phase === "compare")) return renderExpired(career, state);
   switch (state.phase) {
     case "predict":
@@ -408,26 +481,62 @@ function sourcesHtml(sources: Source[]): string {
 }
 
 function renderHome(): void {
+  const career = homeCareer();
+  const first = career.events[0];
+  const cast = sceneCast[career.id] ?? [];
+  const p = progress(codex, careers);
+  const walkHint = !scene
+    ? ""
+    : scene.canWalk()
+      ? `<p class="muted home-hint">走動：方向鍵、WASD 或點地板</p>`
+      : `<p class="muted home-hint">這個場景用「帶我去」移動</p>`;
   root.innerHTML = `
-    <main class="screen">
-      <header class="hero">
-        <p class="kicker">10–15 分鐘・免登入</p>
-        <h1>職場一日</h1>
-        <p>先猜猜看一份工作的一天怎麼分配，再實際過一天，看看想像和現實差多少。</p>
+    <main class="screen home">
+      <p class="status-strip" aria-label="今天第一件事：${esc(first?.time ?? "")} ${esc(first?.title ?? "")}">
+        <span class="status-dot" aria-hidden="true">●</span> ${esc(first?.time ?? career.dayStart)} ${esc(first?.title ?? "")} <span class="status-you">▸ 你</span>
+      </p>
+      <header class="home-title">
+        <h1>GAMELIFE</h1>
+        <p class="home-sub">${esc(career.name)}的一天</p>
       </header>
-      <p class="notice">${DISCLAIMER}這不是職業測驗，不會告訴你「適合」什麼。</p>
-      <h2>選一份工作</h2>
-      <div class="career-list">
+      <div class="career-switch" role="group" aria-label="選擇職業">
         ${careers
           .map(
-            (c) => `<button class="career" data-id="${c.id}">
-              <span class="career-name"><strong>${esc(c.name)}</strong>${c.entryTag ? `<span class="entry-tag">${esc(c.entryTag)}</span>` : ""}</span>
-              <span>${esc(c.dayStart)}–${esc(c.dayEnd)}</span>
+            (c) => `<button type="button" class="career" data-id="${esc(c.id)}" aria-pressed="${c.id === career.id}">
+              <span class="career-name">${esc(c.name)}</span>${c.entryTag ? `<span class="entry-tag">${esc(c.entryTag)}</span>` : ""}
             </button>`,
           )
           .join("")}
       </div>
-      <button class="secondary" id="codex">名詞圖鑑（已收集 ${progress(codex, careers).all.collected} / ${progress(codex, careers).all.total}）</button>
+      <label class="name-field">
+        <span>你的名字（可不填）</span>
+        <input type="text" id="player-name" maxlength="${NAME_MAX}" autocomplete="nickname" value="${esc(playerName)}" placeholder="顯示在名牌與結算卡上" />
+      </label>
+      ${
+        cast.length
+          ? `<section class="cast" aria-label="今天會遇到的人">
+        <h2>今天會遇到的人</h2>
+        <ul>${cast
+          .map((m) => {
+            const [who, role] = m.label.split("｜");
+            return `<li><span class="cast-dot" style="background:${esc(m.color)}" aria-hidden="true"></span><strong>${esc(who)}</strong>${role ? `<span class="muted">${esc(role)}</span>` : ""}</li>`;
+          })
+          .join("")}</ul>
+      </section>`
+          : ""
+      }
+      <button type="button" class="primary" id="start">開始這一天</button>
+      <p class="muted home-hint">跟著頭上有「！」的地方走，或按「帶我去」。</p>
+      ${walkHint}
+      <nav class="home-links">
+        <button type="button" class="link" id="codex">名詞圖鑑與資料來源（${p.all.collected} / ${p.all.total}）</button>
+        <details class="about">
+          <summary>關於</summary>
+          <p>先猜猜看一份工作的一天怎麼分配，再實際過一天，看看想像和現實差多少。10–15 分鐘、免登入。</p>
+          <p class="notice">${DISCLAIMER}${NOT_A_TEST}</p>
+        </details>
+      </nav>
+      <p class="muted home-disclaimer">${DISCLAIMER}</p>
     </main>`;
   root.querySelector("#codex")!.addEventListener("click", () => {
     codexOpen = true;
@@ -436,10 +545,22 @@ function renderHome(): void {
   });
   root.querySelectorAll<HTMLButtonElement>(".career").forEach((b) =>
     b.addEventListener("click", () => {
-      draft = null;
-      setState(newGame(getCareer(b.dataset.id!)!));
+      if (b.dataset.id === homeCareerId) return;
+      homeCareerId = b.dataset.id!;
+      render();
+      root.querySelector<HTMLButtonElement>(`.career[data-id="${CSS.escape(homeCareerId)}"]`)?.focus();
     }),
   );
+  const nameInput = root.querySelector<HTMLInputElement>("#player-name")!;
+  nameInput.addEventListener("input", () => {
+    playerName = nameInput.value.trim().slice(0, NAME_MAX);
+    saveName(playerName);
+    scene?.setPlayerName(playerName);
+  });
+  root.querySelector("#start")!.addEventListener("click", () => {
+    draft = null;
+    setState(newGame(career));
+  });
 }
 
 function renderCodex(): void {
@@ -468,6 +589,13 @@ function renderCodex(): void {
             }
           </section>`;
         })
+        .join("")}
+      <h2 class="codex-sources-title">資料來源</h2>
+      <p class="muted">各職業時間分配比例的依據；每個情境的來源在遊戲中「這個情境的依據」可以看到。</p>
+      ${careers
+        .map(
+          (c) => `<details class="codex-group src"><summary>${esc(c.name)}${allocationIsEstimate(c) ? "（比例為推估）" : ""}</summary>${sourcesHtml(c.allocationSources)}</details>`,
+        )
         .join("")}
     </main>`;
   root.querySelector("#back")!.addEventListener("click", () => {
@@ -839,12 +967,12 @@ function renderCompare(career: Career, s: GameState): void {
 function renderResult(career: Career, s: GameState): void {
   const p = buildProfile(s);
   const gapText = biggestGapText(career, s);
-  const canvas = drawCard(career, p, allocationIsEstimate(career) ? `${gapText}（比例為推估）` : gapText);
+  const canvas = drawCard(career, p, allocationIsEstimate(career) ? `${gapText}（比例為推估）` : gapText, playerName);
   const url = canvas.toDataURL("image/png");
   root.innerHTML = `
     <main class="screen">
       <p class="kicker">第 4 步・結算</p>
-      <h1>今天的你</h1>
+      <h1>今天的${playerName ? esc(playerName) : "你"}</h1>
       <p class="notice">這張卡描述的是你今天做選擇時的節奏偏好與價值取向，不是「你適合當${esc(career.name)}」。</p>
       <img class="result-card" src="${url}" alt="結算卡：節奏${esc(p.pace.label)}，互動${esc(p.social.label)}，成就來源${esc(p.achieve.label)}，壓力類型${esc(p.pressure.label)}" />
       <p class="muted save-hint">長按上方結算卡圖片，選「加入照片」或「儲存圖片」即可存到手機，再分享給朋友。</p>

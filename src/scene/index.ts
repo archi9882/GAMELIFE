@@ -1,7 +1,10 @@
 // 3D 場景登錄表：職業 id → 場景建構函式。沒登錄的職業退回純卡片介面。
-import { createPlumberScene, PLUMBER_PLACE_IDS } from "./plumber";
-import { createSweScene, SWE_PLACE_IDS } from "./swe";
-import { createTeacherScene, TEACHER_PLACE_IDS } from "./teacher";
+import type { CastMember } from "./kit";
+import { createPlumberScene, PLUMBER_CAST, PLUMBER_PLACE_IDS } from "./plumber";
+import { createSweScene, SWE_CAST, SWE_PLACE_IDS } from "./swe";
+import { createTeacherScene, TEACHER_CAST, TEACHER_PLACE_IDS } from "./teacher";
+
+export type { CastMember };
 
 export interface SceneHandle {
   /** 目前開放的事件 id 與正在處理的事件 id：等在各處的角色依此出現 */
@@ -29,8 +32,12 @@ export interface SceneHandle {
   setProgress(p: number): void;
   /** false 時暫停渲染（不在遊玩畫面時） */
   setActive(active: boolean): void;
-  /** 畫面下方被面板蓋住的高度（px，全螢幕沉浸模式用）；0 表示沒有 */
-  setBottomInset(px: number): void;
+  /** 被面板蓋住的區域（px）：手機是下方面板高度，桌機是左側卡片的右緣；鏡頭偏移讓場景置中在可見範圍 */
+  setInsets(insets: { bottom?: number; left?: number }): void;
+  /** 展示模式（選單、預測、對照、結算的背景）：鏡頭慢慢環繞、不能走動、不顯示「！」；減少動態時靜止 */
+  setShowcase(on: boolean): void;
+  /** 玩家名牌：把「你｜導師」的「你」換成名字；空字串還原 */
+  setPlayerName(name: string): void;
   dispose(): void;
 }
 
@@ -45,6 +52,13 @@ export const sceneLocations: Record<string, string[]> = {
   plumber: PLUMBER_PLACE_IDS,
   teacher: TEACHER_PLACE_IDS,
   swe: SWE_PLACE_IDS,
+};
+
+/** 各職業「今天會遇到的人」（場景 npc 的名牌與衣服顏色） */
+export const sceneCast: Record<string, CastMember[]> = {
+  plumber: PLUMBER_CAST,
+  teacher: TEACHER_CAST,
+  swe: SWE_CAST,
 };
 
 export const hasScene = (careerId: string): boolean => careerId in builders;

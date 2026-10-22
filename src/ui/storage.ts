@@ -64,3 +64,27 @@ export function saveAutoWalk(on: boolean): void {
     /* 無法儲存就略過 */
   }
 }
+
+const NAME_KEY = "career-day:name:v1";
+/** 名字最多幾個字（名牌與結算卡放得下） */
+export const NAME_MAX = 12;
+
+/** 玩家名字（可不填）：只存在這台裝置 */
+export function loadName(): string {
+  try {
+    const v = localStorage.getItem(NAME_KEY);
+    return typeof v === "string" ? v.slice(0, NAME_MAX) : "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveName(name: string): void {
+  try {
+    const v = name.trim().slice(0, NAME_MAX);
+    if (v) localStorage.setItem(NAME_KEY, v);
+    else localStorage.removeItem(NAME_KEY);
+  } catch {
+    /* 無法儲存就略過 */
+  }
+}

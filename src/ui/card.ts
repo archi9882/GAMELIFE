@@ -42,7 +42,7 @@ function axis(ctx: CanvasRenderingContext2D, y: number, left: string, right: str
   ctx.fillText(right, x1, y + 64);
 }
 
-export function drawCard(career: Career, p: Profile, biggestGapText: string): HTMLCanvasElement {
+export function drawCard(career: Career, p: Profile, biggestGapText: string, name = ""): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = W;
   c.height = H;
@@ -55,7 +55,7 @@ export function drawCard(career: Career, p: Profile, biggestGapText: string): HT
   ctx.textAlign = "left";
   ctx.fillStyle = "#8a7f72";
   ctx.font = "36px system-ui, sans-serif";
-  ctx.fillText("職場一日｜我的結算卡", 120, 140);
+  ctx.fillText(name ? `職場一日｜${name}的結算卡` : "職場一日｜我的結算卡", 120, 140);
   ctx.fillStyle = "#2b2520";
   ctx.font = "bold 88px system-ui, sans-serif";
   ctx.fillText(career.name, 120, 250);

@@ -72,6 +72,15 @@ export interface SceneDef {
   extras?: (scene: Scene) => { update: (dt: number, t: number, ctx: Ctx, reduced: boolean) => void };
 }
 
+/** 首頁「今天會遇到的人」：名牌與衣服顏色（#rrggbb），直接取自場景的 npc 定義 */
+export interface CastMember {
+  label: string;
+  color: string;
+}
+
+export const castOf = (def: Pick<SceneDef, "npcs">): CastMember[] =>
+  def.npcs.map((n) => ({ label: n.label, color: `#${n.shirt.toString(16).padStart(6, "0")}` }));
+
 const geo = new BoxGeometry(1, 1, 1);
 const mats = new Map<number, MeshLambertMaterial>();
 export const mat = (c: number): MeshLambertMaterial => {
@@ -204,14 +213,21 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   host.appendChild(renderer.domElement);
 
   const scene = new Scene();
-  const CAM_OFFSET = new Vector3(14, 13, 14);
   const cam = def.camera;
   const camTarget = cam.target.clone();
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 80);
+  /** 鏡頭方位：水平半徑 14√2、高 13，預設從 45°（+x、+z 之間）看；展示模式在這附近左右擺動 */
+  const CAM_RADIUS = Math.hypot(14, 14);
+  const CAM_HEIGHT = 13;
+  const CAM_BASE_ANGLE = Math.PI / 4;
+  let camAngle = CAM_BASE_ANGLE;
   const aimCamera = (): void => {
-    camera.position.copy(camTarget).add(CAM_OFFSET);
+    camera.position.set(camTarget.x + CAM_RADIUS * Math.sin(camAngle), camTarget.y + CAM_HEIGHT, camTarget.z + CAM_RADIUS * Math.cos(camAngle));
     camera.lookAt(camTarget);
   };
+  /** 展示模式（首頁與預測、對照、結算的背景）：鏡頭繞場景中心慢慢擺動，不能走動、不顯示「！」 */
+  let showcase = false;
+  const showcaseTarget = new Vector3((cam.minX + cam.maxX) / 2, 0.8, (cam.minZ + cam.maxZ) / 2);
   aimCamera();
 
   const ambient = new AmbientLight(0xffffff, 0.75);
@@ -258,6 +274,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   };
   const above = (w: Walker, h: number) => (): Vector3 => w.p.root.position.clone().add(new Vector3(0, h + w.p.body.position.y, 0));
   addTag(def.player.label, "me", above(player, 2.55));
+  const playerTag = tags[0].el;
   for (const n of npcs) addTag(n.def.label, n.def.cls, above(n.w, 2.45), () => n.w.p.root.visible);
   for (const t of def.placeTags) addTag(t.text, "place", () => t.pos.clone());
   // 目標標記：黃色「！」，浮在有待辦的地點上方；每個地點一個，可以點
@@ -280,7 +297,8 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     const w = size.w;
     const h = size.h;
     const placed: { x: number; y: number; hw: number }[] = [];
-    for (const t of [...tags, ...goalTags]) {
+    for (const g of goalTags) if (showcase) g.el.style.display = "none";
+    for (const t of showcase ? tags : [...tags, ...goalTags]) {
       const v = t.anchor().project(camera);
       const x = (v.x * 0.5 + 0.5) * w;
       let y = (-v.y * 0.5 + 0.5) * h;
@@ -320,7 +338,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     canvas.addEventListener("pointerup", (ev) => {
       const d = down;
       down = null;
-      if (!d || Math.hypot(ev.clientX - d.x, ev.clientY - d.y) >= 8 || arriveCb || !active || !walkEnabled) return;
+      if (!d || Math.hypot(ev.clientX - d.x, ev.clientY - d.y) >= 8 || arriveCb || !active || !walkEnabled || showcase) return;
       const rect = canvas.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
       const ndc = new Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
@@ -342,17 +360,21 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   let sunNow = dayLight(0);
   let skyNow = sunNow.sky.clone();
 
-  /** 畫面下方被面板蓋住的高度（px）：鏡頭往上偏移一半，讓角色留在可見範圍中央 */
-  let bottomInset = 0;
+  /** 畫面下方／左側被面板蓋住的大小（px）：鏡頭偏移一半，讓角色留在可見範圍中央 */
+  let insets = { bottom: 0, left: 0 };
   const resize = (): void => {
     const w = host.clientWidth;
     const h = host.clientHeight;
     if (!w || !h || (w === size.w && h === size.h)) return;
     size = { w, h };
     renderer.setSize(w, h, false);
-    const halfH = (cam.halfW * h) / w;
-    Object.assign(camera, { left: -cam.halfW, right: cam.halfW, top: halfH, bottom: -halfH });
-    if (bottomInset > 0) camera.setViewOffset(w, h, 0, Math.min(bottomInset, h * 0.8) / 2, w, h);
+    // 寬螢幕（桌機鋪滿）時放寬視野：每單位最多約 50px，不讓方塊放得太大
+    const halfW = Math.max(cam.halfW, w / 100);
+    const halfH = (halfW * h) / w;
+    Object.assign(camera, { left: -halfW, right: halfW, top: halfH, bottom: -halfH });
+    const dy = Math.min(insets.bottom, h * 0.8) / 2;
+    const dx = Math.min(insets.left, w * 0.8) / 2;
+    if (dx > 0 || dy > 0) camera.setViewOffset(w, h, -dx, dy, w, h);
     else camera.clearViewOffset();
     camera.updateProjectionMatrix();
   };
@@ -361,6 +383,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   resize();
 
   const clock = new Clock();
+  let orbitT = 0;
   let raf = 0;
   const frame = (): void => {
     raf = requestAnimationFrame(frame);
@@ -369,7 +392,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     resize();
     const t = clock.elapsedTime;
     const ctx: Ctx = { location, event: eventId, open: openIds, flags, visited };
-    if (grid && walkEnabled && !arriveCb && (moveVec.x !== 0 || moveVec.z !== 0)) {
+    if (grid && walkEnabled && !showcase && !arriveCb && (moveVec.x !== 0 || moveVec.z !== 0)) {
       // 方向鍵：取消點地板的路線，按住時以固定速度走，碰到家具沿邊滑動
       player.route = [];
       const len = Math.hypot(moveVec.x, moveVec.z);
@@ -410,7 +433,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     }
     extras?.update(dt, t, ctx, reduced);
 
-    if (grid) {
+    if (grid && !showcase) {
       const key = nearbyIds().join(",");
       if (key !== nearbyKey) {
         nearbyKey = key;
@@ -419,8 +442,14 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     }
 
     // 鏡頭跟著玩家（高度只跟一半，爬上夾層時不會晃太大）
-    const want = new Vector3(Math.max(cam.minX, Math.min(cam.maxX, pp.x)), 0.8 + pp.y * 0.5, Math.max(cam.minZ, Math.min(cam.maxZ, pp.z)));
-    camTarget.lerp(want, reduced ? 1 : Math.min(1, dt * 3));
+    // 展示模式：看場景中心，鏡頭在 45° 左右各約 30° 之間慢慢擺動（減少動態時靜止）
+    const want = showcase
+      ? showcaseTarget
+      : new Vector3(Math.max(cam.minX, Math.min(cam.maxX, pp.x)), 0.8 + pp.y * 0.5, Math.max(cam.minZ, Math.min(cam.maxZ, pp.z)));
+    camTarget.lerp(want, reduced ? 1 : Math.min(1, dt * (showcase ? 1.5 : 3)));
+    if (showcase && !reduced) orbitT += dt;
+    const wantAngle = showcase && !reduced ? CAM_BASE_ANGLE + 0.52 * Math.sin(orbitT * 0.14) : CAM_BASE_ANGLE;
+    camAngle += (wantAngle - camAngle) * (reduced ? 1 : Math.min(1, dt * 2));
     aimCamera();
 
     const light = dayLight(progress);
@@ -536,9 +565,25 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
         skyNow = sunNow.sky.clone();
       }
     },
-    setBottomInset(px) {
-      bottomInset = Math.max(0, px);
+    setInsets(next) {
+      const b = Math.max(0, next.bottom ?? 0);
+      const l = Math.max(0, next.left ?? 0);
+      if (b === insets.bottom && l === insets.left) return;
+      insets = { bottom: b, left: l };
       size = { w: 0, h: 0 };
+    },
+    setShowcase(on) {
+      if (on === showcase) return;
+      showcase = on;
+      if (on) {
+        moveVec = { x: 0, z: 0 };
+        player.pushed = false;
+        if (!arriveCb) player.route = [];
+      }
+    },
+    setPlayerName(name) {
+      const n = name.trim();
+      playerTag.textContent = n ? def.player.label.replace(/^你/, n) : def.player.label;
     },
     setActive(a) {
       active = a;
@@ -550,7 +595,19 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     dispose() {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      // 釋放這個場景自己的貼圖與幾何（共用的方塊幾何與材質留著給下一個場景）
+      const shared = new Set<unknown>(mats.values());
+      scene.traverse((o) => {
+        if (!(o instanceof Mesh)) return;
+        if (o.geometry !== geo) o.geometry.dispose();
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          if (shared.has(m)) continue;
+          (m as MeshBasicMaterial).map?.dispose();
+          m.dispose();
+        }
+      });
       renderer.dispose();
+      renderer.forceContextLoss();
       renderer.domElement.remove();
       overlay.remove();
       goalTags = [];

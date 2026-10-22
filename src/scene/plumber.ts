@@ -1,7 +1,7 @@
 // 水電工場景：剖開的老公寓、材料行、貨車。全部由方塊拼成，沒有外部模型。
 import { Group, Vector3 } from "three";
 import type { SceneHandle } from "./index";
-import { box, createStage, floorLabel, type Ctx, type Place, type SceneDef } from "./kit";
+import { box, castOf, createStage, floorLabel, type Ctx, type Place, type SceneDef } from "./kit";
 
 type Zone = "out" | "in" | "attic";
 const P = (x: number, y: number, z: number, zone: Zone): Place => ({ pos: new Vector3(x, y, z), zone });
@@ -155,6 +155,7 @@ function hasEntered(c: Ctx): boolean {
 }
 
 export const PLUMBER_PLACE_IDS = Object.keys(PLACES);
+export const PLUMBER_CAST = castOf(def);
 
 export function createPlumberScene(host: HTMLElement): SceneHandle | null {
   return createStage(host, def);
