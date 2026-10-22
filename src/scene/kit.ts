@@ -242,6 +242,18 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   addTag(def.player.label, "me", above(player, 2.55));
   for (const n of npcs) addTag(n.def.label, n.def.cls, above(n.w, 2.45), () => n.w.p.root.visible);
   for (const t of def.placeTags) addTag(t.text, "place", () => t.pos.clone());
+  // 目標標記：黃色「！」，浮在要前往的地點上方
+  const goalEl = document.createElement("span");
+  goalEl.className = "tag3d goal";
+  const goalIcon = document.createElement("i");
+  goalIcon.textContent = "！";
+  goalEl.appendChild(goalIcon);
+  overlay.appendChild(goalEl);
+  tags.push({
+    el: goalEl,
+    anchor: () => (goal ? goal.pos.clone().add(new Vector3(0, 2.9, 0)) : new Vector3(0, -99, 0)),
+    shown: () => goal !== null,
+  });
 
   let size = { w: 0, h: 0 };
   const placeTags = (): void => {
@@ -264,6 +276,9 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   };
 
   let current: Place | null = null;
+  /** 目標標記所在地點（事件發生地，玩家還沒到） */
+  let goal: Place | null = null;
+  let arriveCb: (() => void) | null = null;
   let location: string | undefined;
   let eventId: string | undefined;
   const visited = new Set<string>();
@@ -291,12 +306,19 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   let raf = 0;
   const frame = (): void => {
     raf = requestAnimationFrame(frame);
-    const dt = Math.min(clock.getDelta(), 0.05);
+    const dt = Math.min(clock.getDelta(), 0.1);
     if (!active) return;
     resize();
     const t = clock.elapsedTime;
     const ctx: Ctx = { location, event: eventId, flags, visited };
     player.update(dt, t, !reduced);
+    if (arriveCb && !player.moving) {
+      const cb = arriveCb;
+      arriveCb = null;
+      goal = null;
+      if (location) visited.add(location);
+      cb();
+    }
     const pp = player.p.root.position;
 
     for (const n of npcs) {
@@ -319,11 +341,11 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     camTarget.lerp(want, reduced ? 1 : Math.min(1, dt * 3));
     aimCamera();
 
-    const goal = dayLight(progress);
+    const light = dayLight(progress);
     const k = Math.min(1, dt * 2.5);
-    sunNow.sun.lerp(goal.sun, k);
-    skyNow.lerp(goal.sky, k);
-    sunNow.intensity += (goal.intensity - sunNow.intensity) * k;
+    sunNow.sun.lerp(light.sun, k);
+    skyNow.lerp(light.sky, k);
+    sunNow.intensity += (light.intensity - sunNow.intensity) * k;
     sun.color.copy(sunNow.sun);
     sun.intensity = sunNow.intensity;
     renderer.setClearColor(skyNow);
@@ -333,23 +355,48 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   raf = requestAnimationFrame(frame);
 
   return {
-    setLocation(id, event) {
+    focus(id, event) {
       eventId = event;
       const next = id ? def.places[id] : undefined;
       if (!id || !next) return;
       location = id;
-      visited.add(id);
       if (!current) {
+        // 第一次：直接站到事件發生地
         player.p.root.position.copy(next.pos);
         camTarget.set(next.pos.x, 0.8 + next.pos.y * 0.5, next.pos.z);
         for (const n of npcs) if (n.def.follow) n.w.p.root.position.set(next.pos.x + n.def.follow.dx, 0, next.pos.z + n.def.follow.dz);
-      } else if (current !== next) {
-        if (reduced) {
-          player.p.root.position.copy(next.pos);
-          player.route = [];
-        } else player.route = def.route(current, next);
+        visited.add(id);
+        current = next;
+        goal = null;
+        return;
       }
+      goal = current === next && !arriveCb ? null : next;
+    },
+    goTo(id, onArrive) {
+      const next = def.places[id];
+      if (arriveCb) return;
+      if (!next || !current || current === next) {
+        goal = null;
+        onArrive?.();
+        return;
+      }
+      location = id;
+      if (reduced) {
+        player.p.root.position.copy(next.pos);
+        player.route = [];
+        current = next;
+        goal = null;
+        visited.add(id);
+        onArrive?.();
+        return;
+      }
+      player.route = def.route(current, next);
       current = next;
+      arriveCb = onArrive ?? (() => undefined);
+    },
+    at(id) {
+      const p = id ? def.places[id] : undefined;
+      return !!p && current === p && !arriveCb;
     },
     setFlags(f) {
       flags = f;

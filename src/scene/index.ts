@@ -4,8 +4,12 @@ import { createSweScene, SWE_PLACE_IDS } from "./swe";
 import { createTeacherScene, TEACHER_PLACE_IDS } from "./teacher";
 
 export interface SceneHandle {
-  /** 把玩家角色移到地點（Career.locations 的 id）；第一次呼叫直接定位 */
-  setLocation(id: string | undefined, eventId?: string): void;
+  /** 事件發生地（Career.locations 的 id）：第一次直接站過去；之後在該地點上方放「！」標記，角色留在原地 */
+  focus(id: string | undefined, eventId?: string): void;
+  /** 讓角色走到地點，到達時呼叫 onArrive（已在該處或減少動態時立刻呼叫） */
+  goTo(id: string, onArrive?: () => void): void;
+  /** 角色是否已經站在該地點（走路途中為 false） */
+  at(id: string | undefined): boolean;
   setFlags(flags: readonly string[]): void;
   /** 一天的進度 0–1，控制光線 */
   setProgress(p: number): void;

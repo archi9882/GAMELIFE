@@ -26,7 +26,7 @@ import { splitPages } from "../engine/text";
 import { allocationIsEstimate, buildProfile, compareAllocation } from "../engine/scoring";
 import { createScene, hasScene, type SceneHandle } from "../scene";
 import { drawCard } from "./card";
-import { load, loadCodex, save, saveCodex } from "./storage";
+import { load, loadAutoWalk, loadCodex, save, saveAutoWalk, saveCodex } from "./storage";
 
 const DISCLAIMER = "情境為虛構，比例依據見來源。";
 const STAT_LABELS: Record<Stat, string> = { energy: "精力", time: "時間", trust: "信任" };
@@ -113,6 +113,9 @@ function bindTerms(): void {
 let hintShown = false;
 let codex: Codex = {};
 let codexOpen = false;
+let autoWalk = false;
+/** 角色正在走向事件地點 */
+let walking = false;
 let bodyPage = { eventId: "", index: 0 };
 let root: HTMLElement;
 let stageEl: HTMLElement;
@@ -137,6 +140,7 @@ export function mount(el: HTMLElement): void {
   stageLabel = el.querySelector("#stage-label")!;
   root = el.querySelector("#ui")!;
   codex = loadCodex();
+  autoWalk = loadAutoWalk();
   const saved = load();
   state = saved && getCareer(saved.careerId) ? saved : null;
   render();
@@ -146,6 +150,7 @@ function leaveStage(dispose: boolean): void {
   stageEl.hidden = true;
   scene?.setActive(false);
   if (dispose) {
+    walking = false;
     scene?.dispose();
     scene = null;
     sceneCareerId = null;
@@ -168,7 +173,7 @@ function updateStage(career: Career, s: GameState, e: GameEvent): void {
   scene.setActive(true);
   scene.setFlags(s.flags);
   scene.setProgress(timelineProgress(career, s));
-  scene.setLocation(e.location, e.id);
+  scene.focus(e.location, e.id);
   const place = career.locations?.find((l) => l.id === e.location)?.name;
   stageLabel.textContent = `${e.time}${place ? `・${place}` : ""}`;
 }
@@ -353,6 +358,7 @@ function renderPlay(career: Career, s: GameState): void {
   if (!e) return setState(advance(career, s));
   updateStage(career, s, e);
   const head = `${backButton()}${timelineHtml(career, s, `${e.time}・${CATEGORY_LABELS[e.category]}`)}${statsHtml(s)}`;
+  if (!s.pendingOutcome && scene && e.location && !scene.at(e.location)) return renderTravel(career, s, e, head);
   if (s.pendingOutcome) {
     const ch = e.choices[s.pendingOutcome.choiceIndex];
     root.innerHTML = `
@@ -404,6 +410,39 @@ function renderPlay(career: Career, s: GameState): void {
   });
   bindBack();
   bindTerms();
+}
+
+/** 事件在別的地點：先出現「下一步」引導，按「帶我去」角色才走過去，到了才顯示事件 */
+function renderTravel(career: Career, s: GameState, e: GameEvent, head: string): void {
+  const place = career.locations?.find((l) => l.id === e.location)?.name ?? "下一個地點";
+  root.innerHTML = `
+    <main class="screen play">
+      ${head}
+      <article class="card guide">
+        <p class="kicker">下一步</p>
+        <h2>前往：${esc(place)}</h2>
+        <p class="muted">${esc(e.time)}・${CATEGORY_LABELS[e.category]}，有事情需要你處理。看場景裡的「！」標記。</p>
+        <button class="primary" id="go-there" ${walking ? "disabled" : ""}>${walking ? "走過去中…" : "帶我去"}</button>
+        <label class="auto-walk"><input type="checkbox" id="auto-walk" ${autoWalk ? "checked" : ""} /> 之後自動帶我去</label>
+      </article>
+    </main>`;
+  bindBack();
+  const go = (): void => {
+    if (walking || !scene) return;
+    walking = true;
+    scene.goTo(e.location!, () => {
+      walking = false;
+      if (state && currentEvent(career, state)?.id === e.id) render();
+    });
+    if (walking) render();
+  };
+  root.querySelector("#go-there")!.addEventListener("click", go);
+  root.querySelector<HTMLInputElement>("#auto-walk")!.addEventListener("change", (ev) => {
+    autoWalk = (ev.target as HTMLInputElement).checked;
+    saveAutoWalk(autoWalk);
+    if (autoWalk) go();
+  });
+  if (autoWalk && !walking) go();
 }
 
 function biggestGapText(career: Career, s: GameState): string {

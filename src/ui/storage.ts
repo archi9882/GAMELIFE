@@ -46,3 +46,21 @@ export function saveCodex(codex: Codex): void {
     /* 無法儲存就略過 */
   }
 }
+
+const AUTOWALK_KEY = "career-day:autowalk:v1";
+
+export function loadAutoWalk(): boolean {
+  try {
+    return localStorage.getItem(AUTOWALK_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveAutoWalk(on: boolean): void {
+  try {
+    localStorage.setItem(AUTOWALK_KEY, on ? "1" : "0");
+  } catch {
+    /* 無法儲存就略過 */
+  }
+}
