@@ -166,3 +166,11 @@ input[type="range"] { width: 100%; height: 36px; accent-color: var(--accent); ma
 .badge.alert { background: var(--down-bg); color: var(--down); border-color: var(--down); }
 .badge.ok { background: var(--up-bg); color: var(--up); border-color: var(--up); }
 .badge.info { background: var(--warn-bg); color: var(--ink); border-color: var(--warn-line); }
+
+/* 首頁入口標籤與圖鑑 */
+.career .career-name { color: var(--ink); font-size: inherit; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.career .entry-tag { color: var(--ink); padding: 1px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; background: var(--warn-bg); color: var(--ink); border: 1px dashed var(--warn-line); }
+.codex-group { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 4px 14px 8px; margin: 14px 0; }
+.codex-group h2 { margin: 10px 0 4px; }
+.codex-locked-row { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 0 6px; border-top: 1px solid var(--line); }
+.codex-locked { padding: 2px 12px; border-radius: 999px; border: 1px dashed var(--line); color: var(--muted); letter-spacing: 0.2em; font-weight: 700; font-size: 0.85rem; }

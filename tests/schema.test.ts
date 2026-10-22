@@ -85,4 +85,13 @@ describe("劇本格式驗證", () => {
   it("三個職業都有 3D 場景", () => {
     expect(careers.filter((c) => hasScene(c.id)).length).toBe(3);
   });
+
+  it("入口標籤：水電工標示待優化，過長或空白會被擋下", () => {
+    expect(careers.find((c) => c.id === "plumber")!.entryTag).toBe("待優化");
+    const bad = structuredClone(careers[0]) as Career;
+    bad.entryTag = "這個標籤太長了吧";
+    expect(validateCareer(bad).some((e) => e.includes("entryTag"))).toBe(true);
+    bad.entryTag = "";
+    expect(validateCareer(bad).some((e) => e.includes("entryTag"))).toBe(true);
+  });
 });

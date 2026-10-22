@@ -21,11 +21,12 @@ import {
   timelineProgress,
   type GameState,
 } from "../engine/game";
+import { mergeSeen, progress, type Codex } from "../engine/codex";
 import { splitPages } from "../engine/text";
 import { allocationIsEstimate, buildProfile, compareAllocation } from "../engine/scoring";
 import { createScene, hasScene, type SceneHandle } from "../scene";
 import { drawCard } from "./card";
-import { load, save } from "./storage";
+import { load, loadCodex, save, saveCodex } from "./storage";
 
 const DISCLAIMER = "情境為虛構，比例依據見來源。";
 const STAT_LABELS: Record<Stat, string> = { energy: "精力", time: "時間", trust: "信任" };
@@ -71,6 +72,17 @@ function termsIn(texts: string[], career: Career): GlossaryTerm[] {
   return seen.map((t) => career.glossary!.find((g) => g.term === t)!);
 }
 
+/** 這些文字裡出現的名詞：記進圖鑑，並回傳「名詞解釋」折疊區 */
+function glossFor(career: Career, texts: string[]): string {
+  const terms = termsIn(texts, career);
+  const next = mergeSeen(codex, career, terms.map((t) => t.term));
+  if (next !== codex) {
+    codex = next;
+    saveCodex(codex);
+  }
+  return glossHtml(terms);
+}
+
 function glossHtml(terms: GlossaryTerm[]): string {
   if (!terms.length) return "";
   const hint = hintShown ? "" : `<p class="gloss-hint">有虛線的詞可以點，會展開白話解釋。</p>`;
@@ -99,6 +111,8 @@ function bindTerms(): void {
 }
 
 let hintShown = false;
+let codex: Codex = {};
+let codexOpen = false;
 let bodyPage = { eventId: "", index: 0 };
 let root: HTMLElement;
 let stageEl: HTMLElement;
@@ -122,6 +136,7 @@ export function mount(el: HTMLElement): void {
   stageHost = el.querySelector("#stage-canvas")!;
   stageLabel = el.querySelector("#stage-label")!;
   root = el.querySelector("#ui")!;
+  codex = loadCodex();
   const saved = load();
   state = saved && getCareer(saved.careerId) ? saved : null;
   render();
@@ -161,7 +176,7 @@ function updateStage(career: Career, s: GameState, e: GameEvent): void {
 function render(): void {
   if (!state) {
     leaveStage(true);
-    return renderHome();
+    return codexOpen ? renderCodex() : renderHome();
   }
   const career = getCareer(state.careerId)!;
   if (state.phase !== "play") leaveStage(false);
@@ -208,19 +223,60 @@ function renderHome(): void {
         ${careers
           .map(
             (c) => `<button class="career" data-id="${c.id}">
-              <strong>${esc(c.name)}</strong>
+              <span class="career-name"><strong>${esc(c.name)}</strong>${c.entryTag ? `<span class="entry-tag">${esc(c.entryTag)}</span>` : ""}</span>
               <span>${esc(c.dayStart)}–${esc(c.dayEnd)}</span>
             </button>`,
           )
           .join("")}
       </div>
+      <button class="secondary" id="codex">名詞圖鑑（已收集 ${progress(codex, careers).all.collected} / ${progress(codex, careers).all.total}）</button>
     </main>`;
+  root.querySelector("#codex")!.addEventListener("click", () => {
+    codexOpen = true;
+    render();
+    window.scrollTo(0, 0);
+  });
   root.querySelectorAll<HTMLButtonElement>(".career").forEach((b) =>
     b.addEventListener("click", () => {
       draft = null;
       setState(newGame(getCareer(b.dataset.id!)!));
     }),
   );
+}
+
+function renderCodex(): void {
+  const p = progress(codex, careers);
+  root.innerHTML = `
+    <main class="screen">
+      <button class="link" id="back">← 回到選單</button>
+      <p class="kicker">名詞圖鑑</p>
+      <h1>已收集 ${p.all.collected} / ${p.all.total}</h1>
+      <p class="notice">玩的時候看到的名詞會自動收進來。還沒遇到的先顯示「？？？」。解釋是一般性說明，不含具體數字或法規條文。</p>
+      ${careers
+        .filter((c) => (c.glossary?.length ?? 0) > 0)
+        .map((c) => {
+          const got = new Set(codex[c.id] ?? []);
+          const cp = p.byCareer[c.id];
+          return `<section class="codex-group">
+            <h2>${esc(c.name)} <span class="muted">${cp.collected} / ${cp.total}</span></h2>
+            ${c
+              .glossary!.filter((g) => got.has(g.term))
+              .map((g) => `<details class="gloss-item"><summary>${esc(g.term)}</summary><p>${esc(g.meaning)}</p></details>`)
+              .join("")}
+            ${
+              cp.total > cp.collected
+                ? `<div class="codex-locked-row" aria-label="還有 ${cp.total - cp.collected} 個尚未收集">${Array.from({ length: cp.total - cp.collected }, () => `<span class="codex-locked">？？？</span>`).join("")}</div>`
+                : ""
+            }
+          </section>`;
+        })
+        .join("")}
+    </main>`;
+  root.querySelector("#back")!.addEventListener("click", () => {
+    codexOpen = false;
+    render();
+    window.scrollTo(0, 0);
+  });
 }
 
 function renderPredict(career: Career, s: GameState): void {
@@ -233,7 +289,7 @@ function renderPredict(career: Career, s: GameState): void {
       <p class="kicker">第 1 步・預測</p>
       <h1>${esc(career.name)}</h1>
       <p>${annotate(career.intro, career)}</p>
-      ${glossHtml(termsIn([career.intro], career))}
+      ${glossFor(career, [career.intro])}
       <p class="notice">你覺得這份工作一天的時間，大概怎麼分配？拉動滑桿，系統會自動換算成百分比。</p>
       <div class="sliders">
         ${CATEGORIES.map(
@@ -307,7 +363,7 @@ function renderPlay(career: Career, s: GameState): void {
           <p class="outcome">${annotate(ch.outcome, career)}</p>
           <div class="deltas">${deltaHtml(ch.effects)}</div>
         </article>
-        ${glossHtml(termsIn([ch.label, ch.outcome], career))}
+        ${glossFor(career, [ch.label, ch.outcome])}
         <button class="primary" id="next">繼續</button>
       </main>`;
     root.querySelector("#next")!.addEventListener("click", () => setState(advance(career, s)));
@@ -336,7 +392,7 @@ function renderPlay(career: Career, s: GameState): void {
           ? `<div class="choices">${e.choices.map((c, i) => `<button class="choice" data-i="${i}">${esc(c.label)}</button>`).join("")}</div>`
           : ""
       }
-      ${glossHtml(termsIn(visible, career))}
+      ${glossFor(career, visible)}
       <details class="src"><summary>這個情境的依據</summary>${sourcesHtml(e.sources)}</details>
     </main>`;
   root.querySelectorAll<HTMLButtonElement>(".choice").forEach((b) =>

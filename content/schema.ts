@@ -78,6 +78,8 @@ export interface Career {
   reflections: string[];
   /** 對照畫面：落差最大的一類要顯示的說明（選填，v0.1 擴充） */
   categoryNotes?: Partial<Record<Category, string>>;
+  /** 首頁職業入口上的小標籤（例如「待優化」），選填 */
+  entryTag?: string;
   /** 名詞折疊：工作中的專有名詞與一般性解釋 */
   glossary?: GlossaryTerm[];
   /** 狀態徽章規則（選填）；最後一條應無條件，當預設 */
@@ -110,6 +112,7 @@ export const LIMITS = {
   achievementMin: 2,
   glossaryMax: 80,
   badgeMax: 10,
+  entryTagMax: 6,
 } as const;
 
 /** 以 code point 計字數（中文一字算一） */
@@ -177,6 +180,8 @@ export function validateCareer(c: Career): string[] {
   }
   const achievement = events.filter((e) => e.tags?.includes(ACHIEVEMENT_TAG)).length;
   if (achievement < LIMITS.achievementMin) errors.push(at(`「${ACHIEVEMENT_TAG}」事件至少 ${LIMITS.achievementMin} 個（目前 ${achievement}）`));
+
+  if (c.entryTag !== undefined && (!c.entryTag || charLen(c.entryTag) > LIMITS.entryTagMax)) errors.push(at(`entryTag 需 1–${LIMITS.entryTagMax} 字`));
 
   const allText = [
     c.intro,
