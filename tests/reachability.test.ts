@@ -10,6 +10,8 @@ import {
   currentBadge,
   currentEvent,
   currentInterrupt,
+  inspect,
+  investigationDone,
   newGame,
   openEvents,
   remainingMinutes,
@@ -17,8 +19,16 @@ import {
   submitPrediction,
   type GameState,
 } from "../src/engine/game";
-import { TRAVEL_MINUTES, choiceMinutes } from "../content/schema";
+import { INSPECT_MINUTES, TRAVEL_MINUTES, choiceMinutes, validateCareer } from "../content/schema";
 import { buildProfile, compareAllocation } from "../src/engine/scoring";
+
+/** 打開目前事件的資料卡：only = 只開有關的；all = 全部打開 */
+function openCards(career: Career, s: GameState, mode: "relevant" | "all"): GameState {
+  const e = currentEvent(career, s)!;
+  let next = s;
+  for (const it of e.investigate?.items ?? []) if (mode === "all" || it.relevant) next = inspect(career, next, it.id);
+  return next;
+}
 
 /**
  * 窮舉所有玩法（選哪件事先做、選哪個選項）。
@@ -34,7 +44,7 @@ function explore(career: Career) {
   let pathsWithoutSurprise = 0;
   let maxOpen = 1;
   const key = (s: GameState, surprise: boolean) =>
-    [s.phase, [...s.done].sort().join(","), [...s.flags].sort().join(","), s.active ?? "", s.pendingOutcome ? `${s.pendingOutcome.eventId}${s.pendingOutcome.interrupt ? "!" : ""}` : "", s.used, s.at ?? "", (s.expired ?? []).join("+"), surprise ? 1 : 0].join("|");
+    [s.phase, [...s.done].sort().join(","), [...s.flags].sort().join(","), s.active ?? "", s.pendingOutcome ? `${s.pendingOutcome.eventId}${s.pendingOutcome.interrupt ? "!" : ""}` : "", s.used, s.inspected.length, s.at ?? "", (s.expired ?? []).join("+"), surprise ? 1 : 0].join("|");
 
   const stack: [GameState, boolean][] = [[submitPrediction(career, newGame(career), newGame(career).prediction), false]];
   while (stack.length) {
@@ -82,10 +92,14 @@ function explore(career: Career) {
     }
     seenEvents.add(e.id);
     const surprise = sawSurprise || e.tags.includes(SURPRISE_TAG);
-    e.choices.forEach((_, i) => {
-      seenChoices.add(`${e.id}#${i}`);
-      stack.push([advance(career, choose(career, s, i)), surprise]);
-    });
+    // 有查資料的事件：分「只開有關的」與「全部打開」兩種分支（影響倒數）
+    const variants = e.investigate && !investigationDone(career, s, e) ? [openCards(career, s, "relevant"), openCards(career, s, "all")] : [s];
+    for (const v of variants) {
+      e.choices.forEach((_, i) => {
+        seenChoices.add(`${e.id}#${i}`);
+        stack.push([advance(career, choose(career, v, i)), surprise]);
+      });
+    }
   }
   return { seenEvents, seenChoices, seenExpired, finished, pathsWithoutSurprise, maxOpen, states: seenStates.size };
 }
@@ -127,7 +141,7 @@ function autoStep(career: Career, s: GameState, choiceFor: (eventId: string) => 
   if (s.pendingOutcome) return advance(career, s);
   if (currentInterrupt(career, s)) return chooseInterrupt(career, s, 0);
   const t = currentEvent(career, s) ? s : selectEvent(career, s, openEvents(career, s)[0].id);
-  return choose(career, t, choiceFor(currentEvent(career, t)!.id));
+  return choose(career, openCards(career, t, "relevant"), choiceFor(currentEvent(career, t)!.id));
 }
 
 /** 玩完一場：沒選事件時先做第一件；choiceFor 決定每個事件選第幾個選項 */
@@ -178,7 +192,7 @@ describe("同時多個待辦（group）", () => {
     }
     throw new Error("沒有走到群組");
   };
-  const doEvent = (s: GameState, id: string, choice = 0) => advance(teacher, choose(teacher, selectEvent(teacher, s, id), choice));
+  const doEvent = (s: GameState, id: string, choice = 0) => advance(teacher, choose(teacher, openCards(teacher, selectEvent(teacher, s, id), "relevant"), choice));
 
   it("群組開始時，同組事件同時開放，且不會自動選一件", () => {
     const s = toGroup();
@@ -269,7 +283,7 @@ describe("倒數計時", () => {
     }
     throw new Error("沒有走到群組");
   };
-  const doEvent = (s: GameState, id: string, choice: number) => advance(teacher, choose(teacher, selectEvent(teacher, s, id), choice));
+  const doEvent = (s: GameState, id: string, choice: number) => advance(teacher, choose(teacher, openCards(teacher, selectEvent(teacher, s, id), "relevant"), choice));
 
   it("沒有時限的事件不累計時間", () => {
     const s = submitPrediction(teacher, newGame(teacher), newGame(teacher).prediction);
@@ -279,12 +293,12 @@ describe("倒數計時", () => {
 
   it("有時限的群組：時間 = 選項的分鐘數；同群組內換地點才加移動時間", () => {
     const s0 = toGroup();
-    expect(remainingMinutes(teacher, s0)).toBe(50);
+    expect(remainingMinutes(teacher, s0)).toBe(60);
     expect(clockMinutes(teacher, s0)).toBe(9 * 60 + 20);
     const form = teacher.events.find((e) => e.id === "t-form")!;
     const s1 = choose(teacher, selectEvent(teacher, s0, "t-form"), 1); // time -5 → 15 分鐘；群組第一件，不算移動
     expect(s1.used).toBe(choiceMinutes(form.choices[1]));
-    expect(remainingMinutes(teacher, advance(teacher, s1))).toBe(50 - s1.used);
+    expect(remainingMinutes(teacher, advance(teacher, s1))).toBe(60 - s1.used);
   });
 
   it("移動時間：午休群組先在辦公室、再到輔導室，才加 5 分鐘", () => {
@@ -303,7 +317,7 @@ describe("倒數計時", () => {
   it("時間到：其餘還開著的事件全部來不及，依 expire 結算並進入下一段", () => {
     let s = toGroup();
     s = doEvent(s, "t-form", 0); // 30 分鐘
-    s = doEvent(s, "t-parent-call", 1); // 25 分鐘 → 55 ≥ 50，時間用盡
+    s = doEvent(s, "t-parent-call", 1); // 25 分鐘 + 查資料 15 分鐘 → 30 + 40 = 70 ≥ 60，時間用盡
     expect(s.expired).toEqual(["t-prep"]);
     expect(s.done).toContain("t-prep");
     expect(s.log[s.log.length - 1]).toEqual({ eventId: "t-prep", choiceIndex: -1 });
@@ -326,8 +340,8 @@ describe("倒數計時", () => {
   it("用最省時的選項可以全部做完，不會有任何事來不及", () => {
     let s = toGroup();
     s = doEvent(s, "t-form", 1); // 15
-    s = doEvent(s, "t-parent-call", 2); // 10
-    s = doEvent(s, "t-prep", 0); // 20（共 45 ≤ 50）
+    s = doEvent(s, "t-parent-call", 2); // 10 + 查資料 15 = 25
+    s = doEvent(s, "t-prep", 0); // 20（共 60 ≤ 60）
     expect(s.expired).toBeNull();
   });
 });
@@ -348,5 +362,73 @@ describe("狀態徽章", () => {
     const plumber = careers.find((c) => c.id === "plumber")!;
     const e = plumber.events.find((x) => x.id === "p-test")!;
     expect(e.choices.map((ch) => ch.setFlags?.[0])).toEqual(["tested", "rushed"]);
+  });
+});
+
+describe("查資料", () => {
+  const teacher = careers.find((c) => c.id === "teacher")!;
+  const swe = careers.find((c) => c.id === "swe")!;
+  /** 走到指定事件到了畫面上（還沒查資料、也沒選） */
+  const toEvent = (career: Career, id: string): GameState => {
+    let s = submitPrediction(career, newGame(career), newGame(career).prediction);
+    for (let guard = 0; guard < 80; guard++) {
+      if (!s.pendingOutcome && !s.expired?.length) {
+        if (openEvents(career, s).some((e) => e.id === id)) {
+          s = currentEvent(career, s) ? s : selectEvent(career, s, id);
+          if (currentEvent(career, s)?.id === id) return currentInterrupt(career, s) ? advance(career, chooseInterrupt(career, s, 0)) : s;
+        }
+      }
+      s = autoStep(career, s);
+    }
+    throw new Error("沒有走到事件");
+  };
+  const callEvent = teacher.events.find((e) => e.id === "t-parent-call")!;
+  const relevantIds = callEvent.investigate!.items.filter((it) => it.relevant).map((it) => it.id);
+  const irrelevantId = callEvent.investigate!.items.find((it) => !it.relevant)!.id;
+
+  it("有時限的群組：每打開一張卡扣 5 分鐘；沒有時限則不扣", () => {
+    const s = toEvent(teacher, "t-parent-call");
+    expect(inspect(teacher, s, relevantIds[0]).used).toBe(s.used + INSPECT_MINUTES);
+    const free = toEvent(swe, "s-alert");
+    expect(remainingMinutes(swe, free)).toBeNull();
+    const cardId = swe.events.find((e) => e.id === "s-alert")!.investigate!.items[0].id;
+    expect(inspect(swe, free, cardId).used).toBe(free.used);
+    expect(inspect(swe, free, cardId).inspected).toEqual([`s-alert:${cardId}`]);
+  });
+
+  it("同一張卡不能打開兩次，也不能打開不存在的卡", () => {
+    const s = inspect(teacher, toEvent(teacher, "t-parent-call"), relevantIds[0]);
+    expect(() => inspect(teacher, s, relevantIds[0])).toThrow();
+    expect(() => inspect(teacher, s, "nope")).toThrow();
+  });
+
+  it("查完資料前不能選；有關的卡都打開後即完成，無關的不必打開", () => {
+    let s = toEvent(teacher, "t-parent-call");
+    expect(investigationDone(teacher, s, callEvent)).toBe(false);
+    expect(() => choose(teacher, s, 0)).toThrow(/查完資料/);
+    for (const id of relevantIds.slice(0, -1)) s = inspect(teacher, s, id);
+    expect(investigationDone(teacher, s, callEvent)).toBe(false);
+    s = inspect(teacher, s, relevantIds[relevantIds.length - 1]);
+    expect(investigationDone(teacher, s, callEvent)).toBe(true);
+    expect(s.inspected).not.toContain(`t-parent-call:${irrelevantId}`);
+    expect(() => choose(teacher, s, 0)).not.toThrow();
+  });
+
+  it("全部打開比只開有關的多花時間", () => {
+    const s = toEvent(teacher, "t-parent-call");
+    const all = openCards(teacher, s, "all");
+    const rel = openCards(teacher, s, "relevant");
+    expect(all.used - rel.used).toBe((callEvent.investigate!.items.length - relevantIds.length) * INSPECT_MINUTES);
+  });
+
+  it("沒有查資料的事件視為已完成", () => {
+    const e = teacher.events.find((x) => x.id === "t-form")!;
+    expect(investigationDone(teacher, newGame(teacher), e)).toBe(true);
+  });
+
+  it("驗證器把最少查資料時間算進「做得完」", () => {
+    const bad = structuredClone(teacher) as Career;
+    bad.deadlines!["office-morning"] = 50; // 最省 45 分 + 查資料 15 分 = 60 > 50
+    expect(validateCareer(bad).some((e) => e.includes("太緊"))).toBe(true);
   });
 });

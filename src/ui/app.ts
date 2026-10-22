@@ -2,12 +2,14 @@
 import { careers, getCareer } from "../../content/index";
 import {
   CATEGORIES,
+  INSPECT_MINUTES,
   CATEGORY_LABELS,
   type Career,
   type Category,
   type GameEvent,
   type GlossaryTerm,
   type Interrupt,
+  type Investigation,
   type Source,
   type Stat,
 } from "../../content/schema";
@@ -18,9 +20,12 @@ import {
   chooseInterrupt,
   clockMinutes,
   currentBadge,
+  deadlineOf,
   currentEvent,
   currentInterrupt,
   formatClock,
+  inspect,
+  investigationDone,
   newGame,
   openEvents,
   remainingMinutes,
@@ -151,7 +156,7 @@ export function mount(el: HTMLElement): void {
   codex = loadCodex();
   autoWalk = loadAutoWalk();
   const saved = load();
-  state = saved && getCareer(saved.careerId) && Array.isArray(saved.done) ? saved : null;
+  state = saved && getCareer(saved.careerId) && Array.isArray(saved.done) && Array.isArray(saved.inspected) ? saved : null;
   render();
 }
 
@@ -423,10 +428,23 @@ function renderPlay(career: Career, s: GameState): void {
     bindTerms();
     return;
   }
-  if (bodyPage.eventId !== e.id) bodyPage = { eventId: e.id, index: 0 };
+  // 已經開始查資料的事件（例如重新整理後），直接回到最後一頁的查資料面板
+  if (bodyPage.eventId !== e.id) {
+    const started = s.inspected.some((k) => k.startsWith(`${e.id}:`));
+    bodyPage = { eventId: e.id, index: started ? splitPages(e.body).length - 1 : 0 };
+  }
   const pages = splitPages(e.body);
   const last = bodyPage.index >= pages.length - 1;
-  const visible = [e.title, pages[bodyPage.index], ...(last ? e.choices.map((c) => c.label) : [])];
+  const inv = e.investigate;
+  const investigating = last && !!inv && !investigationDone(career, s, e);
+  const showChoices = last && !investigating;
+  const opened = inv ? inv.items.filter((it) => s.inspected.includes(`${e.id}:${it.id}`)) : [];
+  const visible = [
+    e.title,
+    pages[bodyPage.index],
+    ...(last && inv ? [inv.prompt, ...inv.items.map((it) => it.label), ...opened.map((it) => it.detail)] : []),
+    ...(showChoices ? e.choices.map((c) => c.label) : []),
+  ];
   root.innerHTML = `
     <main class="screen play">
       ${head}
@@ -439,8 +457,9 @@ function renderPlay(career: Career, s: GameState): void {
             : `<div class="pager"><span class="muted">${bodyPage.index + 1} / ${pages.length}</span><button class="primary" id="page-next">繼續</button></div>`
         }
       </article>
+      ${last && inv ? investigationHtml(career, s, e, inv, investigating) : ""}
       ${
-        last
+        showChoices
           ? `<div class="choices">${e.choices.map((c, i) => `<button class="choice" data-i="${i}">${esc(c.label)}</button>`).join("")}</div>`
           : ""
       }
@@ -450,12 +469,39 @@ function renderPlay(career: Career, s: GameState): void {
   root.querySelectorAll<HTMLButtonElement>(".choice").forEach((b) =>
     b.addEventListener("click", () => setState(choose(career, s, Number(b.dataset.i)))),
   );
+  root.querySelectorAll<HTMLButtonElement>(".inv-card").forEach((b) =>
+    b.addEventListener("click", () => setState(inspect(career, s, b.dataset.id!))),
+  );
   root.querySelector("#page-next")?.addEventListener("click", () => {
     bodyPage = { eventId: e.id, index: bodyPage.index + 1 };
     render();
   });
   bindBack();
   bindTerms();
+}
+
+/** 查資料面板：任務說明、進度、資料卡；打開過的卡留著內容。查完後只剩已打開的內容 */
+function investigationHtml(career: Career, s: GameState, e: GameEvent, inv: Investigation, active: boolean): string {
+  const isOpen = (it: Investigation["items"][number]) => s.inspected.includes(`${e.id}:${it.id}`);
+  const opened = inv.items.filter(isOpen);
+  const total = inv.items.filter((it) => it.relevant).length;
+  const found = opened.filter((it) => it.relevant).length;
+  const cards = inv.items
+    .map((it) => {
+      const o = isOpen(it);
+      const mark = o ? `<span class="inv-mark ${it.relevant ? "yes" : "no"}">${it.relevant ? "有關 ✓" : "無關"}</span>` : "";
+      return `<button type="button" class="inv-card ${o ? (it.relevant ? "yes" : "no") : ""}" data-id="${esc(it.id)}" ${o || !active ? "disabled" : ""}><span class="inv-label">${esc(it.label)}</span>${mark}</button>`;
+    })
+    .join("");
+  const hint = active && deadlineOf(career, s) !== null ? `<p class="muted inv-hint">每查一份資料花 ${INSPECT_MINUTES} 分鐘</p>` : "";
+  return `<section class="card inv" aria-label="查資料">
+    <p class="kicker">查資料</p>
+    <p class="inv-prompt">${annotate(inv.prompt, career)}</p>
+    <p class="inv-progress">已找到 ${found} / ${total} 份有關資料</p>
+    <div class="inv-grid">${cards}</div>
+    ${hint}
+    ${opened.length ? `<ul class="inv-details">${opened.map((it) => `<li><strong>${annotate(it.label, career)}</strong>：${annotate(it.detail, career)}</li>`).join("")}</ul>` : ""}
+  </section>`;
 }
 
 /** 打斷事件（來電、訊息）：事件到了畫面上時先跳出來，回應完才回到原本的事件 */

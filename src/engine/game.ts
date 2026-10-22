@@ -7,6 +7,7 @@ import {
   STATS,
   TRAITS,
   type Career,
+  INSPECT_MINUTES,
   TRAVEL_MINUTES,
   choiceMinutes,
   type Category,
@@ -43,6 +44,8 @@ export interface GameState {
   at: string | null;
   /** 剛剛來不及處理的事件 id，等玩家看過「時間到」畫面 */
   expired: string[] | null;
+  /** 已打開的資料卡，格式 `事件id:卡片id` */
+  inspected: string[];
   stats: Record<Stat, number>;
   traits: Record<Trait, number>;
   flags: string[];
@@ -69,6 +72,7 @@ export function newGame(career: Career): GameState {
     used: 0,
     at: null,
     expired: null,
+    inspected: [],
     stats: { ...INITIAL_STATS },
     traits: zeroTraits(),
     flags: [],
@@ -140,7 +144,7 @@ export function normalize(pred: Record<Category, number>): Record<Category, numb
 }
 
 export function submitPrediction(career: Career, s: GameState, pred: Record<Category, number>): GameState {
-  return settle(career, { ...s, prediction: normalize(pred), phase: "play", cursor: 0, done: [], active: null, pendingOutcome: null, used: 0, at: null, expired: null });
+  return settle(career, { ...s, prediction: normalize(pred), phase: "play", cursor: 0, done: [], active: null, pendingOutcome: null, used: 0, at: null, expired: null, inspected: [] });
 }
 
 /** 同時有多件待辦時，選一件來處理 */
@@ -192,10 +196,28 @@ export function currentInterrupt(career: Career, s: GameState): Interrupt | null
   return list.find((i) => i.during === e.id && !s.done.includes(i.id) && (i.requires ?? []).every((f) => s.flags.includes(f))) ?? null;
 }
 
+/** 查資料是否完成：沒有查資料的事件視為完成；有關的卡都打開了才算 */
+export function investigationDone(_career: Career, s: GameState, e: GameEvent): boolean {
+  return (e.investigate?.items ?? []).every((it) => !it.relevant || s.inspected.includes(`${e.id}:${it.id}`));
+}
+
+/** 打開一張資料卡：記錄並扣時間（只在有時限的群組）；不能重複打開 */
+export function inspect(career: Career, s: GameState, itemId: string): GameState {
+  const e = currentEvent(career, s);
+  if (!e?.investigate || s.pendingOutcome) throw new Error("目前沒有可查的資料");
+  if (currentInterrupt(career, s)) throw new Error("請先處理打斷事件");
+  if (!e.investigate.items.some((it) => it.id === itemId)) throw new Error(`資料 ${itemId} 不存在`);
+  const key = `${e.id}:${itemId}`;
+  if (s.inspected.includes(key)) throw new Error("這份資料已經看過了");
+  const used = deadlineOf(career, s) !== null ? s.used + INSPECT_MINUTES : s.used;
+  return { ...s, inspected: [...s.inspected, key], used };
+}
+
 export function choose(career: Career, s: GameState, choiceIndex: number): GameState {
   const e = currentEvent(career, s);
   if (!e || s.pendingOutcome) throw new Error("目前沒有可選擇的事件");
   if (currentInterrupt(career, s)) throw new Error("請先處理打斷事件");
+  if (!investigationDone(career, s, e)) throw new Error("請先查完資料");
   const ch: Choice | undefined = e.choices[choiceIndex];
   if (!ch) throw new Error(`選項 ${choiceIndex} 不存在`);
   const travel = s.at && e.location && s.at !== e.location ? TRAVEL_MINUTES : 0;

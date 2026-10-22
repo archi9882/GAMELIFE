@@ -69,6 +69,23 @@ export interface Interrupt {
   requires?: string[];
 }
 
+/** 查資料小遊戲的一張資料卡 */
+export interface InvestigationItem {
+  id: string;
+  /** 卡片標題（打開前就看得到） */
+  label: string;
+  /** 打開後的內容 */
+  detail: string;
+  /** 是否與任務有關；有關的卡都打開了才算查完 */
+  relevant: boolean;
+}
+
+/** 查資料：顯示選項前先從多張資料卡中找出有關的 */
+export interface Investigation {
+  prompt: string;
+  items: InvestigationItem[];
+}
+
 export interface GameEvent {
   id: string;
   time: string;
@@ -85,6 +102,8 @@ export interface GameEvent {
   group?: string;
   /** 有時限的群組裡必填：來不及處理的後果 */
   expire?: Expire;
+  /** 查資料：找齊有關的資料卡，才會出現選項 */
+  investigate?: Investigation;
 }
 
 export interface PractitionerFeedback {
@@ -134,6 +153,8 @@ export const ACHIEVEMENT_TAG = "成就感";
 
 export const BASE_MINUTES = 10;
 export const TRAVEL_MINUTES = 5;
+/** 打開一張資料卡花掉的遊戲分鐘（只在有時限的群組才扣） */
+export const INSPECT_MINUTES = 5;
 /** 一個選項花掉的遊戲分鐘：基本 10 分鐘，加上 time 扣分 */
 export const choiceMinutes = (c: Choice): number => BASE_MINUTES + Math.max(0, -(c.effects.time ?? 0));
 
@@ -151,6 +172,13 @@ export const LIMITS = {
   callerMax: 12,
   deadlineMin: 15,
   deadlineMax: 180,
+  promptMax: 40,
+  itemLabelMax: 12,
+  itemDetailMax: 60,
+  itemsMin: 4,
+  itemsMax: 6,
+  relevantMin: 2,
+  relevantMax: 3,
 } as const;
 
 /** 以 code point 計字數（中文一字算一） */
@@ -208,6 +236,22 @@ function checkChoices(choices: Choice[], w: string, errors: string[], exact?: nu
   for (const a of choices) for (const b of choices) if (a !== b && dominates(a, b)) errors.push(`${w}: 「${a.label}」全面優於「${b.label}」，形成明顯正解`);
 }
 
+/** 查資料的欄位、字數、張數與有關張數 */
+function checkInvestigation(inv: Investigation, w: string, errors: string[]): void {
+  const iw = `${w} 查資料`;
+  if (!inv.prompt || charLen(inv.prompt) > LIMITS.promptMax) errors.push(`${iw}: prompt 需 1–${LIMITS.promptMax} 字`);
+  const items = inv.items ?? [];
+  if (items.length < LIMITS.itemsMin || items.length > LIMITS.itemsMax) errors.push(`${iw}: 資料卡需 ${LIMITS.itemsMin}–${LIMITS.itemsMax} 張（目前 ${items.length}）`);
+  const relevant = items.filter((it) => it.relevant).length;
+  if (relevant < LIMITS.relevantMin || relevant > LIMITS.relevantMax) errors.push(`${iw}: 有關的資料卡需 ${LIMITS.relevantMin}–${LIMITS.relevantMax} 張（目前 ${relevant}）`);
+  if (new Set(items.map((it) => it.id)).size !== items.length) errors.push(`${iw}: 資料卡 id 重複`);
+  for (const it of items) {
+    if (!it.id) errors.push(`${iw}: 資料卡缺 id`);
+    if (!it.label || charLen(it.label) > LIMITS.itemLabelMax) errors.push(`${iw}: 資料卡「${it.id}」label 需 1–${LIMITS.itemLabelMax} 字`);
+    if (!it.detail || charLen(it.detail) > LIMITS.itemDetailMax) errors.push(`${iw}: 資料卡「${it.id}」detail 需 1–${LIMITS.itemDetailMax} 字`);
+  }
+}
+
 /** 驗證一份劇本，回傳錯誤訊息（空陣列 = 通過） */
 export function validateCareer(c: Career): string[] {
   const errors: string[] = [];
@@ -245,6 +289,7 @@ export function validateCareer(c: Career): string[] {
     c.intro,
     ...(c.interrupts ?? []).flatMap((i) => [i.title, i.body, ...(i.choices ?? []).flatMap((ch) => [ch.label, ch.outcome])]),
     ...events.map((e) => e.expire?.outcome ?? ""),
+    ...events.flatMap((e) => (e.investigate ? [e.investigate.prompt, ...(e.investigate.items ?? []).flatMap((it) => [it.label, it.detail])] : [])),
     ...events.flatMap((e) => [e.title, e.body, ...(e.choices ?? []).flatMap((ch) => [ch.label, ch.outcome])]),
   ].join("\n");
   const seenTerms = new Set<string>();
@@ -305,6 +350,7 @@ export function validateCareer(c: Career): string[] {
       if (!flagsSetBefore.has(f)) errors.push(`${w}: requires 的旗標 "${f}" 沒有被更早的選項設定`);
     }
 
+    if (e.investigate) checkInvestigation(e.investigate, w, errors);
     const choices = e.choices ?? [];
     checkChoices(choices, w, errors);
     for (const ch of choices) for (const f of ch.setFlags ?? []) flagsSetBefore.add(f);
@@ -335,8 +381,11 @@ export function validateCareer(c: Career): string[] {
     }
     if (!Number.isInteger(minutes) || minutes < LIMITS.deadlineMin || minutes > LIMITS.deadlineMax) errors.push(`${w}: 需為 ${LIMITS.deadlineMin}–${LIMITS.deadlineMax} 的整數分鐘`);
     const cost = (e: GameEvent) => (e.choices ?? []).map(choiceMinutes);
-    const minSum = members.reduce((a, e) => a + Math.min(...cost(e)), 0);
-    const maxSum = members.reduce((a, e) => a + Math.max(...cost(e)), 0);
+    // 查資料：最少要打開所有有關的卡；最多全部打開
+    const inspectMin = (e: GameEvent) => (e.investigate?.items ?? []).filter((it) => it.relevant).length * INSPECT_MINUTES;
+    const inspectMax = (e: GameEvent) => (e.investigate?.items ?? []).length * INSPECT_MINUTES;
+    const minSum = members.reduce((a, e) => a + Math.min(...cost(e)) + inspectMin(e), 0);
+    const maxSum = members.reduce((a, e) => a + Math.max(...cost(e)) + inspectMax(e), 0);
     // 移動只算同一群組內從一個地點走到另一個地點；同地點的事排在一起最省，所以最少要走（地點數 − 1）趟
     const places = new Set(members.map((e) => e.location ?? ""));
     const minTravel = TRAVEL_MINUTES * (places.size - 1);

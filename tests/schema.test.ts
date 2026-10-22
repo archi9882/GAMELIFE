@@ -181,4 +181,29 @@ describe("劇本格式驗證", () => {
       }
     });
   });
+
+  describe("查資料", () => {
+    const withInv = (mutate: (inv: NonNullable<Career["events"][number]["investigate"]>) => void) => {
+      const bad = structuredClone(careers.find((c) => c.id === "swe")!) as Career;
+      mutate(bad.events.find((e) => e.id === "s-alert")!.investigate!);
+      return validateCareer(bad).filter((e) => e.includes("查資料"));
+    };
+
+    it("張數太少或太多會被擋下", () => {
+      expect(withInv((inv) => (inv.items = inv.items.slice(0, 3))).some((e) => e.includes("資料卡需"))).toBe(true);
+      expect(withInv((inv) => inv.items.push(...inv.items.slice(0, 2).map((it, i) => ({ ...it, id: `x${i}` })))).some((e) => e.includes("資料卡需"))).toBe(true);
+    });
+
+    it("有關張數不是 2–3 張會被擋下", () => {
+      expect(withInv((inv) => inv.items.forEach((it) => (it.relevant = false))).some((e) => e.includes("有關的資料卡"))).toBe(true);
+      expect(withInv((inv) => inv.items.forEach((it) => (it.relevant = true))).some((e) => e.includes("有關的資料卡"))).toBe(true);
+    });
+
+    it("過長的文字與重複 id 會被擋下", () => {
+      expect(withInv((inv) => (inv.prompt = "字".repeat(41))).some((e) => e.includes("prompt"))).toBe(true);
+      expect(withInv((inv) => (inv.items[0].label = "字".repeat(13))).some((e) => e.includes("label"))).toBe(true);
+      expect(withInv((inv) => (inv.items[0].detail = "字".repeat(61))).some((e) => e.includes("detail"))).toBe(true);
+      expect(withInv((inv) => (inv.items[1].id = inv.items[0].id)).some((e) => e.includes("id 重複"))).toBe(true);
+    });
+  });
 });

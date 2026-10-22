@@ -24,8 +24,8 @@
     "core": "在這份微軟調查裡，開發相關活動（寫程式、除錯、測試、需求、審查、文件）加起來約 48%，但單純寫程式只有 15%，除錯就占 14%。",
     "communicate": "會議占 15%、Email 占 10%，再加上被打斷和協助同事，溝通類約占一天的三分之一。軟體是團隊一起做的東西。",
     "admin": "寫文件、填工單、整理事後檢討報告，這些也是工程師的工作。",
-    "wait": "等 CI 跑完、等別的團隊回覆、等環境部署，零碎的等待會累積。",
-    "learn": "技術變化很快，讀文件、查資料、學新工具幾乎每天都在發生。"
+    "wait": "資料裡這一類是移動、規劃與環境架設（3%）；遊戲把等待 CI 放在這類是本專案近似。",
+    "learn": "資料中學習只占約 3%，但技術更新快，工程師常需要自己抽時間學。"
   },
   "events": [
     {
@@ -37,17 +37,17 @@
       "body": "十五分鐘的站會，每人報告昨天做了什麼、今天要做什麼、卡在哪裡。你其實卡在一個沒頭緒的問題。",
       "choices": [
         {
-          "label": "老實說卡住，請人幫忙",
+          "label": "說明卡在哪裡，請人幫忙",
           "effects": { "time": -10, "trust": 10, "energy": -5 },
           "traits": { "social": 1 },
           "outcome": "資深同事說會後幫你看，但站會延長了，大家晚一點才回到座位。",
           "setFlags": ["asked_help"]
         },
         {
-          "label": "說「進行中」，自己再試",
-          "effects": { "trust": -5, "energy": -10 },
+          "label": "說明進度，自己再試一小時",
+          "effects": { "time": 5, "trust": -5, "energy": -10 },
           "traits": { "social": -1, "achieve_solve": 1 },
-          "outcome": "會議準時結束，但你得一個人繼續跟這個問題搏鬥。"
+          "outcome": "站會準時結束，你多出一點時間；但得一個人繼續跟這個問題搏鬥。"
         }
       ],
       "tags": ["意想不到", "會議"],
@@ -62,6 +62,17 @@
       "category": "core",
       "title": "線上告警",
       "body": "監控系統跳出警示：部分使用者付款失敗。今天剛好輪到你值班，訊息群組開始有人在問。",
+      "investigate": {
+        "prompt": "找出付款失敗從什麼時候開始、跟什麼有關",
+        "items": [
+          { "id": "log", "label": "錯誤紀錄", "detail": "10:02 起大量出現「付款服務逾時」，之前幾乎沒有。", "relevant": true },
+          { "id": "deploy", "label": "今天的部署紀錄", "detail": "10:00 上線了一個新版本，內容包含付款流程的修改。", "relevant": true },
+          { "id": "chart", "label": "付款服務監控圖", "detail": "回應時間在 10:00 之後突然拉高，失敗率同步上升。", "relevant": true },
+          { "id": "wifi", "label": "辦公室 Wi-Fi 狀態", "detail": "今天辦公室網路正常，沒有斷線紀錄。", "relevant": false },
+          { "id": "spec", "label": "上週的需求文件", "detail": "上週討論的是首頁改版，和付款無關。", "relevant": false },
+          { "id": "calendar", "label": "團隊行事曆", "detail": "下午兩點有例行站會，沒有其他安排。", "relevant": false }
+        ]
+      },
       "choices": [
         {
           "label": "立刻停下手邊工作處理",
@@ -74,7 +85,7 @@
           "label": "先回滾到上一版",
           "effects": { "time": -5, "trust": -5, "energy": -5 },
           "traits": { "pace": 1, "achieve_solve": 1 },
-          "outcome": "錯誤停止了，但新功能也跟著下線，產品經理不太高興。"
+          "outcome": "錯誤很快停止，使用者可以付款了；但你還沒找到原因，還得查。"
         }
       ],
       "tags": ["突發"],
@@ -95,7 +106,6 @@
       },
       "category": "admin",
       "title": "事後檢討報告",
-      "requires": ["hotfix"],
       "body": "主管請你寫一份事故檢討：發生什麼、影響多少使用者、根本原因、之後怎麼預防。",
       "choices": [
         {
@@ -127,7 +137,7 @@
         },
         "outcome": "同事等不到你的 review，只好自己合併。"
       },
-      "category": "communicate",
+      "category": "core",
       "title": "一個很大的 PR",
       "body": "同事送來一個改了 40 個檔案的 pull request 請你 review，他希望今天合併，好趕上這次上線。",
       "choices": [
@@ -144,10 +154,10 @@
           "outcome": "長期來看比較好維護，但他今天趕不上，臉色不太好看。"
         },
         {
-          "label": "大致看過就核准",
+          "label": "只看重點檔案就核准",
           "effects": { "trust": 5, "energy": -5, "time": 5 },
           "traits": { "pace": 1, "social": 1 },
-          "outcome": "同事很感謝你。只是你心裡有點不安，不確定有沒有漏看什麼。",
+          "outcome": "同事很感謝你，也趕上了上線；但沒看的檔案裡可能有漏掉的問題。",
           "setFlags": ["rubber_stamp"]
         }
       ],
@@ -233,15 +243,15 @@
       "choices": [
         {
           "label": "關掉通知專心除錯",
-          "effects": { "energy": -15, "trust": -5 },
+          "effects": { "energy": -15, "time": -15 },
           "traits": { "social": -1, "achieve_solve": 2 },
           "outcome": "一個半小時後你找到原因：一個時區轉換的錯誤。修好的瞬間超有成就感。"
         },
         {
           "label": "請同事一起看",
-          "effects": { "time": -5, "energy": -5 },
+          "effects": { "time": -5, "energy": -5, "trust": -5 },
           "traits": { "social": 1, "achieve_solve": 1 },
-          "outcome": "他十分鐘就看出問題，但你覺得自己好像沒真正搞懂。"
+          "outcome": "他十分鐘就看出問題，你省下時間；但欠了他一個人情，也沒真正搞懂。"
         }
       ],
       "tags": ["成就感", "專注"],
@@ -301,13 +311,13 @@
           "label": "自己追查並修正",
           "effects": { "energy": -15, "time": -15 },
           "traits": { "achieve_solve": 1, "pace": 1 },
-          "outcome": "你修好了，也學到一課：review 的時間省不得。"
+          "outcome": "你修好了，順手在 PR 補了一則說明；但花掉不少精力。"
         },
         {
           "label": "先撤回那次合併",
-          "effects": { "trust": -10, "time": -5 },
+          "effects": { "trust": -5, "time": -5 },
           "traits": { "pace": 1 },
-          "outcome": "環境恢復了。同事散會後看到，有點尷尬地來找你討論。"
+          "outcome": "環境很快恢復，你也省下精力；同事散會後看到，有點尷尬地來找你討論。"
         }
       ],
       "tags": ["突發"],
@@ -337,10 +347,10 @@
           "outcome": "講完他自己成功部署了一次，興奮地跟你道謝。你的進度又晚了一點。"
         },
         {
-          "label": "丟文件連結給他",
+          "label": "回他文件連結，請他卡住再問",
           "effects": { "trust": -5, "time": -5 },
           "traits": { "social": -1 },
-          "outcome": "你很快回到工作，但文件有點過時，他卡了一個下午。"
+          "outcome": "你很快回到工作；他看完還有兩處不懂，隔天早上才問。"
         }
       ],
       "tags": ["成就感", "人際"],
