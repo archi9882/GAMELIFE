@@ -1,6 +1,7 @@
 // 高中老師場景：剖開的校舍（教室、辦公室、輔導室、走廊）與前方的中庭。全部由方塊拼成。
 import { Group, Vector3 } from "three";
 import type { SceneHandle } from "./index";
+import type { Rect } from "./nav";
 import { box, createStage, floorLabel, type Place, type SceneDef } from "./kit";
 
 const P = (x: number, y: number, z: number, zone: string): Place => ({ pos: new Vector3(x, y, z), zone });
@@ -11,6 +12,30 @@ const PLACES: Record<string, Place> = {
   counsel: P(13.2, 0, -1.2, "counsel"),
   hall: P(8.2, 0, 1.1, "hall"),
 };
+/** 自由走動：可走的地板（校舍含走廊、前方中庭）與家具障礙；隔間只到走廊前，出入口保持開著 */
+const R = (x0: number, z0: number, x1: number, z1: number): Rect => ({ x0, z0, x1, z1 });
+export const TEACHER_NAV: { walkable: Rect[]; blocked: Rect[] } = {
+  walkable: [R(-0.9, -5.9, 16, 2), R(-5, 2, 19, 5.2)],
+  blocked: [
+    R(5.4, -6, 5.6, -0.4), // 教室／辦公室矮隔間
+    R(10.9, -6, 11.1, -0.4), // 辦公室／輔導室矮隔間
+    R(-0.6, -5.3, 1.0, -4.5), // 講桌
+    // 課桌（含椅子）：三排三列
+    ...[0.5, 1.9, 4.5].flatMap((x) => [-3.6, -2.4, -1.2].flatMap((z) => [R(x - 0.5, z - 0.3, x + 0.5, z + 0.3), R(x - 0.25, z + 0.4, x + 0.25, z + 0.9)])),
+    // 辦公桌（含椅子）
+    ...[-4.9, -2.8].flatMap((z) => [7.0, 9.6].flatMap((x) => [R(x - 0.9, z - 0.45, x + 0.9, z + 0.45), R(x - 0.25, z + 0.7, x + 0.25, z + 1.2)])),
+    R(10, -6, 10.8, -5.5), // 文件櫃
+    R(12.9, -5.5, 15.5, -4.45), // 沙發
+    R(11.45, -4.1, 12.55, -3.3), // 茶几
+    R(14.75, -2.35, 15.45, -1.65), // 盆栽
+    R(15.4, 4.3, 15.6, 4.5), // 旗桿
+    R(4.1, 4.45, 5.9, 4.95), // 長椅
+    R(9.6, 4.45, 11.4, 4.95),
+    R(-3.45, 2.75, -1.75, 4.45), // 樹
+  ],
+};
+export const TEACHER_PLACE_POS: Record<string, { x: number; z: number }> = Object.fromEntries(Object.entries(PLACES).map(([id, p]) => [id, { x: p.pos.x, z: p.pos.z }]));
+
 /** 各房間在走廊上的出入口 x（與房間內的走道對齊） */
 const HALL_X: Record<string, number> = { classroom: 3.2, office: 8.3, counsel: 13.2 };
 const HALL_Z = 1.0;
@@ -122,6 +147,7 @@ const def: SceneDef = {
     { text: "辦公室", pos: new Vector3(8.2, 3.1, -5.9) },
     { text: "輔導室", pos: new Vector3(13.2, 3.1, -5.9) },
   ],
+  ...TEACHER_NAV,
   camera: { halfW: 8.2, target: new Vector3(3.2, 0.8, -2), minX: 2.5, maxX: 12.5, minZ: -3.5, maxZ: 1.5 },
 };
 

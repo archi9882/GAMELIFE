@@ -135,6 +135,8 @@ let root: HTMLElement;
 let stageEl: HTMLElement;
 let stageHost: HTMLElement;
 let stageLabel: HTMLElement;
+let stageActions: HTMLElement;
+let dpadEl: HTMLElement;
 let scene: SceneHandle | null = null;
 let sceneCareerId: string | null = null;
 let state: GameState | null = null;
@@ -148,10 +150,20 @@ function setState(s: GameState | null): void {
 }
 
 export function mount(el: HTMLElement): void {
-  el.innerHTML = `<div id="stage" hidden><div id="stage-canvas"></div><span id="stage-label" class="stage-label"></span></div><div id="ui"></div>`;
+  el.innerHTML = `<div id="stage" hidden><div id="stage-canvas"></div><span id="stage-label" class="stage-label"></span>
+    <div id="stage-actions" class="stage-actions"></div>
+    <div id="dpad" class="dpad" role="group" aria-label="移動" hidden>
+      <button type="button" class="dpad-btn" data-dir="up" aria-label="上">▲</button>
+      <button type="button" class="dpad-btn" data-dir="left" aria-label="左">◀</button>
+      <button type="button" class="dpad-btn" data-dir="right" aria-label="右">▶</button>
+      <button type="button" class="dpad-btn" data-dir="down" aria-label="下">▼</button>
+    </div></div><div id="ui"></div>`;
   stageEl = el.querySelector("#stage")!;
   stageHost = el.querySelector("#stage-canvas")!;
   stageLabel = el.querySelector("#stage-label")!;
+  stageActions = el.querySelector("#stage-actions")!;
+  dpadEl = el.querySelector("#dpad")!;
+  bindDpad();
   root = el.querySelector("#ui")!;
   codex = loadCodex();
   autoWalk = loadAutoWalk();
@@ -160,7 +172,82 @@ export function mount(el: HTMLElement): void {
   render();
 }
 
+type Dir = "up" | "down" | "left" | "right";
+const padHeld: Record<Dir, boolean> = { up: false, down: false, left: false, right: false };
+const keyHeld: Record<Dir, boolean> = { up: false, down: false, left: false, right: false };
+const KEY_DIR: Record<string, Dir> = {
+  ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+  w: "up", W: "up", s: "down", S: "down", a: "left", A: "left", d: "right", D: "right",
+};
+
+/** 合併螢幕方向鍵與鍵盤，送給場景（畫面相對：右 +x、下 +z） */
+function pushMove(): void {
+  const h = (d: Dir): number => (padHeld[d] || keyHeld[d] ? 1 : 0);
+  scene?.setMove(h("right") - h("left"), h("down") - h("up"));
+}
+
+function clearMove(): void {
+  for (const d of Object.keys(padHeld) as Dir[]) padHeld[d] = keyHeld[d] = false;
+  scene?.setMove(0, 0);
+}
+
+function onKeyDown(ev: KeyboardEvent): void {
+  const d = KEY_DIR[ev.key];
+  const t = ev.target as HTMLElement | null;
+  if (!d || ev.ctrlKey || ev.metaKey || ev.altKey || (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  ev.preventDefault(); // 方向鍵不要捲動頁面
+  keyHeld[d] = true;
+  pushMove();
+}
+
+function onKeyUp(ev: KeyboardEvent): void {
+  const d = KEY_DIR[ev.key];
+  if (!d) return;
+  keyHeld[d] = false;
+  pushMove();
+}
+
+/** 螢幕方向鍵：按住走、放開停（指標離開按鈕或被取消也停） */
+function bindDpad(): void {
+  dpadEl.querySelectorAll<HTMLButtonElement>(".dpad-btn").forEach((b) => {
+    const dir = b.dataset.dir as Dir;
+    const stop = (): void => {
+      padHeld[dir] = false;
+      pushMove();
+    };
+    b.addEventListener("pointerdown", (ev) => {
+      ev.preventDefault();
+      padHeld[dir] = true;
+      pushMove();
+    });
+    b.addEventListener("pointerup", stop);
+    b.addEventListener("pointercancel", stop);
+    b.addEventListener("pointerleave", stop);
+    b.addEventListener("contextmenu", (ev) => ev.preventDefault());
+  });
+}
+
+/** 開關自由走動的操作介面（方向鍵 UI 與鍵盤）；離開遊玩畫面或事件開始時關閉 */
+function setWalkUi(on: boolean): void {
+  const was = !dpadEl.hidden;
+  scene?.setWalkEnabled(on);
+  dpadEl.hidden = !on;
+  stageEl.classList.toggle("walkable", on);
+  if (on) {
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", clearMove);
+  } else {
+    window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("keyup", onKeyUp);
+    window.removeEventListener("blur", clearMove);
+    if (was) clearMove();
+  }
+}
+
 function leaveStage(dispose: boolean): void {
+  setWalkUi(false);
+  stageActions.replaceChildren();
   stageEl.hidden = true;
   scene?.setActive(false);
   if (dispose) {
@@ -172,7 +259,7 @@ function leaveStage(dispose: boolean): void {
 }
 
 /** 遊玩畫面上方的 3D 場景；沒有場景或不支援 WebGL 時隱藏，退回純卡片 */
-function updateStage(career: Career, s: GameState, e: GameEvent | null): void {
+function updateStage(career: Career, s: GameState, e: GameEvent | null, walk = true): void {
   if (!hasScene(career.id)) return leaveStage(false);
   stageEl.hidden = false;
   if (!scene || sceneCareerId !== career.id) {
@@ -206,6 +293,40 @@ function updateStage(career: Career, s: GameState, e: GameEvent | null): void {
       if (target && state) setState(selectEvent(career, state, target.id));
     },
   );
+  // 自由走動：只在選事件（任務板）與前往途中開放；事件內容顯示時不能走開
+  const canMove = walk && scene.canWalk() && (e ? !s.pendingOutcome && !!e.location && !scene.at(e.location) : true);
+  setWalkUi(canMove);
+  scene.onNearbyChange(() => {
+    if (state?.phase === "play") render();
+  });
+  // 任務板：走到有待辦的地點附近，場景右下角出現「處理：○○」
+  stageActions.replaceChildren();
+  if (!e && canMove) {
+    const near = new Set(scene.nearby());
+    const here = open.filter((o) => o.location && near.has(o.location));
+    for (const o of here.slice(0, 2)) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "stage-action";
+      b.textContent = `處理：${o.title}`;
+      b.addEventListener("click", () => {
+        if (state) setState(selectEvent(career, state, o.id));
+      });
+      stageActions.appendChild(b);
+    }
+    if (here.length > 2) {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "stage-action more";
+      more.textContent = `還有 ${here.length - 2} 件`;
+      more.addEventListener("click", () => {
+        const q = root.querySelector<HTMLElement>(".quest");
+        q?.scrollIntoView({ block: "center", behavior: "smooth" });
+        q?.focus();
+      });
+      stageActions.appendChild(more);
+    }
+  }
   stageLabel.textContent = e ? `${timeLabel(career, s, e.time)}${placeName(e.location) ? `・${placeName(e.location)}` : ""}` : `${open[0] ? timeLabel(career, s, open[0].time) : ""}・${open.length} 件待辦`;
 }
 
@@ -549,7 +670,7 @@ function renderInterrupt(career: Career, s: GameState, itr: Interrupt, head: str
 
 /** 時間到：其餘還開著的事件來不及處理，逐件說明後果 */
 function renderExpired(career: Career, s: GameState): void {
-  if (s.phase === "play") updateStage(career, s, null);
+  if (s.phase === "play") updateStage(career, s, null, false);
   const items = (s.expired ?? []).map((id) => career.events.find((e) => e.id === id)).filter((e): e is GameEvent => !!e);
   root.innerHTML = `
     <main class="screen play">
@@ -615,6 +736,7 @@ function renderTravel(career: Career, s: GameState, e: GameEvent, head: string):
         <h2>前往：${esc(place)}</h2>
         <p class="muted">${esc(e.time)}・${CATEGORY_LABELS[e.category]}，有事情需要你處理。看場景裡的「！」標記。</p>
         <button class="primary" id="go-there" ${walking ? "disabled" : ""}>${walking ? "走過去中…" : "帶我去"}</button>
+        ${scene?.canWalk() ? `<p class="muted walk-hint">也可以自己走過去（點地板或用方向鍵）</p>` : ""}
         <label class="auto-walk"><input type="checkbox" id="auto-walk" ${autoWalk ? "checked" : ""} /> 之後自動帶我去</label>
       </article>
     </main>`;

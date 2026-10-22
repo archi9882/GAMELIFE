@@ -14,6 +14,16 @@ export interface SceneHandle {
   goTo(id: string, onArrive?: () => void): void;
   /** 角色是否已經站在該地點（走路途中為 false） */
   at(id: string | undefined): boolean;
+  /** 這個場景是否支援自由走動（點地板、方向鍵）；水電工只能「帶我去」 */
+  canWalk(): boolean;
+  /** false 時忽略點地板與方向輸入（事件內容顯示時關閉）；預設 true */
+  setWalkEnabled(on: boolean): void;
+  /** 方向輸入，螢幕相對：dx 右 +1／左 -1，dz 下（朝向鏡頭）+1／上（遠離鏡頭）-1；(0,0) 停下。帶我去走路中會被忽略 */
+  setMove(dx: number, dz: number): void;
+  /** 角色附近（半徑 1.5、沒在走）的地點 id；走路途中為空 */
+  nearby(): string[];
+  /** nearby() 的集合改變時呼叫（包含停下來的時候）；只保留最後一個 callback */
+  onNearbyChange(cb: (() => void) | undefined): void;
   setFlags(flags: readonly string[]): void;
   /** 一天的進度 0–1，控制光線 */
   setProgress(p: number): void;
