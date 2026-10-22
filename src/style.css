@@ -176,9 +176,9 @@ input[type="range"] { width: 100%; height: 36px; accent-color: var(--accent); ma
 .codex-locked { padding: 2px 12px; border-radius: 999px; border: 1px dashed var(--line); color: var(--muted); letter-spacing: 0.2em; font-weight: 700; font-size: 0.85rem; }
 
 /* 目標標記與「帶我去」 */
-.tag3d.goal { background: transparent; padding: 0; }
+.tag3d.goal { background: transparent; padding: 0; border: 0; pointer-events: auto; cursor: pointer; }
 .tag3d.goal i {
-  display: block; width: 30px; height: 30px; border-radius: 50%; border: 2px solid #1c1916;
+  display: block; min-width: 30px; height: 30px; padding: 0 7px; border-radius: 15px; border: 2px solid #1c1916;
   background: #f2c230; color: #1c1916; font-style: normal; font-weight: 900; font-size: 18px; line-height: 26px; text-align: center;
   animation: goal-bounce 0.9s ease-in-out infinite alternate;
 }
@@ -188,3 +188,17 @@ input[type="range"] { width: 100%; height: 36px; accent-color: var(--accent); ma
 .guide .primary:disabled { opacity: 0.6; cursor: default; }
 .auto-walk { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 0.9rem; color: var(--muted); min-height: 44px; }
 .auto-walk input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+/* 同時多個待辦 */
+.quests { display: grid; gap: 10px; margin: 12px 0; }
+.quest {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 10px 14px; text-align: left;
+  background: var(--surface); color: var(--ink); border: 2px solid var(--ink); border-radius: 14px;
+}
+.quest:active { transform: scale(0.98); }
+.q-mark {
+  flex: none; width: 30px; height: 30px; border-radius: 50%; background: #f2c230; color: #1c1916; border: 2px solid #1c1916;
+  font-weight: 900; line-height: 26px; text-align: center;
+}
+.q-main { display: grid; min-width: 0; }
+.q-main .muted { font-size: 0.82rem; }

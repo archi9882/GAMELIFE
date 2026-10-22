@@ -173,6 +173,7 @@
       "id": "p-old-wire",
       "time": "12:20",
       "location": "ceiling",
+      "group": "noon",
       "category": "communicate",
       "title": "老化的線路",
       "body": "天花板裡的電線外皮已經硬化龜裂，有短路風險。但這不在今天的報價範圍內。",
@@ -197,8 +198,9 @@
     },
     {
       "id": "p-lunch",
-      "time": "12:50",
+      "time": "12:20",
       "location": "van",
+      "group": "noon",
       "category": "admin",
       "title": "車上的午餐",
       "body": "你在車上吃便當，LINE 跳出三個新客戶的訊息，都傳了照片想先問大概多少錢。",

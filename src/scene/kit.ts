@@ -30,8 +30,10 @@ export interface Place {
 
 export interface Ctx {
   location: string | undefined;
-  /** 目前事件 id（讓角色只在特定事件出現） */
+  /** 玩家正在處理的事件 id */
   event: string | undefined;
+  /** 目前開放的所有事件 id（含正在處理的）；等在各處的角色依此出現 */
+  open: ReadonlySet<string>;
   flags: readonly string[];
   /** 到過的地點 id */
   visited: ReadonlySet<string>;
@@ -242,25 +244,19 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   addTag(def.player.label, "me", above(player, 2.55));
   for (const n of npcs) addTag(n.def.label, n.def.cls, above(n.w, 2.45), () => n.w.p.root.visible);
   for (const t of def.placeTags) addTag(t.text, "place", () => t.pos.clone());
-  // 目標標記：黃色「！」，浮在要前往的地點上方
-  const goalEl = document.createElement("span");
-  goalEl.className = "tag3d goal";
-  const goalIcon = document.createElement("i");
-  goalIcon.textContent = "！";
-  goalEl.appendChild(goalIcon);
-  overlay.appendChild(goalEl);
-  tags.push({
-    el: goalEl,
-    anchor: () => (goal ? goal.pos.clone().add(new Vector3(0, 2.9, 0)) : new Vector3(0, -99, 0)),
-    shown: () => goal !== null,
-  });
+  // 目標標記：黃色「！」，浮在有待辦的地點上方；每個地點一個，可以點
+  interface GoalTag extends Tag {
+    id: string;
+  }
+  let goalTags: GoalTag[] = [];
+  let onPick: ((placeId: string) => void) | undefined;
 
   let size = { w: 0, h: 0 };
   const placeTags = (): void => {
     const w = size.w;
     const h = size.h;
     const placed: { x: number; y: number; hw: number }[] = [];
-    for (const t of tags) {
+    for (const t of [...tags, ...goalTags]) {
       const v = t.anchor().project(camera);
       const x = (v.x * 0.5 + 0.5) * w;
       let y = (-v.y * 0.5 + 0.5) * h;
@@ -276,11 +272,10 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   };
 
   let current: Place | null = null;
-  /** 目標標記所在地點（事件發生地，玩家還沒到） */
-  let goal: Place | null = null;
   let arriveCb: (() => void) | null = null;
   let location: string | undefined;
   let eventId: string | undefined;
+  let openIds: ReadonlySet<string> = new Set();
   const visited = new Set<string>();
   let active = true;
   let progress = 0;
@@ -310,12 +305,11 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     if (!active) return;
     resize();
     const t = clock.elapsedTime;
-    const ctx: Ctx = { location, event: eventId, flags, visited };
+    const ctx: Ctx = { location, event: eventId, open: openIds, flags, visited };
     player.update(dt, t, !reduced);
     if (arriveCb && !player.moving) {
       const cb = arriveCb;
       arriveCb = null;
-      goal = null;
       if (location) visited.add(location);
       cb();
     }
@@ -355,28 +349,43 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   raf = requestAnimationFrame(frame);
 
   return {
-    focus(id, event) {
-      eventId = event;
-      const next = id ? def.places[id] : undefined;
-      if (!id || !next) return;
+    setEvents(open, active) {
+      openIds = new Set(open);
+      eventId = active;
+    },
+    place(id) {
+      const next = def.places[id];
+      if (!next || current) return;
       location = id;
-      if (!current) {
-        // 第一次：直接站到事件發生地
-        player.p.root.position.copy(next.pos);
-        camTarget.set(next.pos.x, 0.8 + next.pos.y * 0.5, next.pos.z);
-        for (const n of npcs) if (n.def.follow) n.w.p.root.position.set(next.pos.x + n.def.follow.dx, 0, next.pos.z + n.def.follow.dz);
-        visited.add(id);
-        current = next;
-        goal = null;
-        return;
-      }
-      goal = current === next && !arriveCb ? null : next;
+      player.p.root.position.copy(next.pos);
+      camTarget.set(next.pos.x, 0.8 + next.pos.y * 0.5, next.pos.z);
+      for (const n of npcs) if (n.def.follow) n.w.p.root.position.set(next.pos.x + n.def.follow.dx, 0, next.pos.z + n.def.follow.dz);
+      visited.add(id);
+      current = next;
+    },
+    setGoals(goals, pick) {
+      onPick = pick;
+      for (const g of goalTags) g.el.remove();
+      goalTags = goals
+        .filter((g) => def.places[g.id])
+        .map((g) => {
+          const place = def.places[g.id];
+          const el = document.createElement("button");
+          el.type = "button";
+          el.className = "tag3d goal";
+          el.setAttribute("aria-label", `前往${g.name ?? g.id}（${g.count} 件待辦）`);
+          const icon = document.createElement("i");
+          icon.textContent = g.count > 1 ? `！${g.count}` : "！";
+          el.appendChild(icon);
+          el.addEventListener("click", () => onPick?.(g.id));
+          overlay.appendChild(el);
+          return { id: g.id, el, anchor: () => place.pos.clone().add(new Vector3(0, 2.9, 0)), shown: () => true };
+        });
     },
     goTo(id, onArrive) {
       const next = def.places[id];
       if (arriveCb) return;
       if (!next || !current || current === next) {
-        goal = null;
         onArrive?.();
         return;
       }
@@ -385,7 +394,6 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
         player.p.root.position.copy(next.pos);
         player.route = [];
         current = next;
-        goal = null;
         visited.add(id);
         onArrive?.();
         return;
@@ -421,6 +429,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
       renderer.dispose();
       renderer.domElement.remove();
       overlay.remove();
+      goalTags = [];
     },
   };
 }

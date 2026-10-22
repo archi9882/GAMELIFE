@@ -4,8 +4,12 @@ import { createSweScene, SWE_PLACE_IDS } from "./swe";
 import { createTeacherScene, TEACHER_PLACE_IDS } from "./teacher";
 
 export interface SceneHandle {
-  /** 事件發生地（Career.locations 的 id）：第一次直接站過去；之後在該地點上方放「！」標記，角色留在原地 */
-  focus(id: string | undefined, eventId?: string): void;
+  /** 目前開放的事件 id 與正在處理的事件 id：等在各處的角色依此出現 */
+  setEvents(open: readonly string[], active?: string): void;
+  /** 第一次把角色放到地點（已經放過就不動） */
+  place(id: string): void;
+  /** 有待辦的地點：每個地點一個黃色「！」（count>1 顯示數量），可以點 */
+  setGoals(goals: { id: string; name?: string; count: number }[], onPick?: (placeId: string) => void): void;
   /** 讓角色走到地點，到達時呼叫 onArrive（已在該處或減少動態時立刻呼叫） */
   goTo(id: string, onArrive?: () => void): void;
   /** 角色是否已經站在該地點（走路途中為 false） */

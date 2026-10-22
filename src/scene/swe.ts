@@ -91,8 +91,8 @@ const def: SceneDef = {
   npcs: [
     { label: "新人", cls: "mate", shirt: 0x7ab58a, pants: 0x3a3a42, hat: null, pos: new Vector3(13.6, 0, -4.05), yaw: Math.PI, visible: () => true },
     { label: "隔壁團隊", cls: "npc", shirt: 0xb59ac8, pants: 0x3a3a42, hat: null, pos: new Vector3(13.6, 0, -1.65), yaw: Math.PI, visible: () => true },
-    { label: "資深同事", cls: "npc", shirt: 0x6a7bb5, pants: 0x3a3a42, hat: null, pos: new Vector3(2.9, 0, -3.5), yaw: Math.PI * 0.6, visible: (c) => c.event === "s-standup" },
-    { label: "產品經理", cls: "owner", shirt: 0xc0707a, pants: 0x3a3a42, hat: null, pos: new Vector3(7.6, 0, -3.3), yaw: Math.PI * 0.5, visible: (c) => c.event === "s-scope" },
+    { label: "資深同事", cls: "npc", shirt: 0x6a7bb5, pants: 0x3a3a42, hat: null, pos: new Vector3(2.9, 0, -3.5), yaw: Math.PI * 0.6, visible: (c) => c.open.has("s-standup") },
+    { label: "產品經理", cls: "owner", shirt: 0xc0707a, pants: 0x3a3a42, hat: null, pos: new Vector3(7.6, 0, -3.3), yaw: Math.PI * 0.5, visible: (c) => c.open.has("s-scope") },
   ],
   placeTags: [
     { text: "站會區", pos: new Vector3(1.4, 3.1, -5.9) },

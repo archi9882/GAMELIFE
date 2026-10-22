@@ -59,6 +59,8 @@ export interface GameEvent {
   requires?: string[];
   /** 3D 場景中的地點（Career.locations 的 id） */
   location?: string;
+  /** 同一個 group 的事件（需相鄰、time 相同）會同時開放，由玩家決定處理順序 */
+  group?: string;
 }
 
 export interface PractitionerFeedback {
@@ -213,8 +215,18 @@ export function validateCareer(c: Career): string[] {
   const ids = new Set<string>();
   const flagsSetBefore = new Set<string>();
   let prevTime = -1;
+  const groupSize = new Map<string, number>();
+  const closedGroups = new Set<string>();
+  let prevEvent: GameEvent | undefined;
   for (const e of events) {
     const w = at(`事件 ${e.id}`);
+    if (e.group) {
+      groupSize.set(e.group, (groupSize.get(e.group) ?? 0) + 1);
+      if (closedGroups.has(e.group)) errors.push(`${w}: group "${e.group}" 的事件必須相鄰`);
+      if (prevEvent?.group === e.group && prevEvent.time !== e.time) errors.push(`${w}: 同一個 group 的 time 必須相同（${prevEvent.time} ≠ ${e.time}）`);
+    }
+    if (prevEvent?.group && prevEvent.group !== e.group) closedGroups.add(prevEvent.group);
+    prevEvent = e;
     if (ids.has(e.id)) errors.push(`${w}: id 重複`);
     ids.add(e.id);
     if (!CATEGORIES.includes(e.category)) errors.push(`${w}: category 不合法`);
@@ -257,5 +269,6 @@ export function validateCareer(c: Career): string[] {
     }
     for (const ch of choices) for (const f of ch.setFlags ?? []) flagsSetBefore.add(f);
   }
+  for (const [g, n] of groupSize) if (n < 2) errors.push(at(`group "${g}" 只有 ${n} 個事件，至少要 2 個`));
   return errors;
 }

@@ -94,4 +94,24 @@ describe("劇本格式驗證", () => {
     bad.entryTag = "";
     expect(validateCareer(bad).some((e) => e.includes("entryTag"))).toBe(true);
   });
+
+  it("群組：必須相鄰、時間相同、至少 2 個事件", () => {
+    const base = careers.find((c) => c.id === "teacher")!;
+    const apart = structuredClone(base) as Career;
+    apart.events[0].group = "x"; // t-morning
+    apart.events[3].group = "x"; // t-prep：中間隔了別的事件
+    expect(validateCareer(apart).some((e) => e.includes("必須相鄰"))).toBe(true);
+
+    const diffTime = structuredClone(base) as Career;
+    diffTime.events[3].time = "09:30"; // t-prep 與同組的 t-form 時間不同
+    expect(validateCareer(diffTime).some((e) => e.includes("time 必須相同"))).toBe(true);
+
+    const lonely = structuredClone(base) as Career;
+    lonely.events[0].group = "solo";
+    expect(validateCareer(lonely).some((e) => e.includes("至少要 2 個"))).toBe(true);
+  });
+
+  it("三個職業都有至少一個同時開放的群組", () => {
+    for (const c of careers) expect(c.events.some((e) => e.group)).toBe(true);
+  });
 });

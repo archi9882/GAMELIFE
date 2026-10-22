@@ -2,7 +2,7 @@
 import type { Codex } from "../engine/codex";
 import type { GameState } from "../engine/game";
 
-const KEY = "career-day:v1";
+const KEY = "career-day:v2";
 
 export function save(s: GameState | null): void {
   try {

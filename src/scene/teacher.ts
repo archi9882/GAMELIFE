@@ -113,9 +113,9 @@ const def: SceneDef = {
   player: { label: "你｜導師", shirt: 0x4f6fa8, pants: 0x3a3a42, hat: null },
   npcs: [
     { label: "同事", cls: "mate", shirt: 0x7a9b6a, pants: 0x4a4a52, hat: null, pos: new Vector3(9.6, 0, -1.95), yaw: Math.PI, visible: () => true },
-    { label: "阿哲｜學生", cls: "npc", shirt: 0xf0f0f0, pants: 0x2a3550, hat: null, pos: new Vector3(9.4, 0, -1.0), yaw: Math.PI * 1.2, visible: (c) => c.event === "t-lunch-talk" },
-    { label: "家長", cls: "owner", shirt: 0xb06a8a, pants: 0x4a4a52, hat: null, pos: new Vector3(12.2, 0, -2.6), yaw: Math.PI * 0.6, visible: (c) => c.event === "t-parent-meeting" },
-    { label: "小美｜學生", cls: "npc", shirt: 0xf0f0f0, pants: 0x2a3550, hat: null, pos: new Vector3(9.6, 0, 1.2), yaw: Math.PI * 0.9, visible: (c) => c.event === "t-progress" },
+    { label: "阿哲｜學生", cls: "npc", shirt: 0xf0f0f0, pants: 0x2a3550, hat: null, pos: new Vector3(9.4, 0, -1.0), yaw: Math.PI * 1.2, visible: (c) => c.open.has("t-lunch-talk") },
+    { label: "家長", cls: "owner", shirt: 0xb06a8a, pants: 0x4a4a52, hat: null, pos: new Vector3(12.2, 0, -2.6), yaw: Math.PI * 0.6, visible: (c) => c.open.has("t-parent-meeting") },
+    { label: "小美｜學生", cls: "npc", shirt: 0xf0f0f0, pants: 0x2a3550, hat: null, pos: new Vector3(9.6, 0, 1.2), yaw: Math.PI * 0.9, visible: (c) => c.open.has("t-progress") },
   ],
   placeTags: [
     { text: "教室", pos: new Vector3(2.4, 3.1, -5.9) },

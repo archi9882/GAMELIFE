@@ -16,6 +16,8 @@ import {
   currentBadge,
   currentEvent,
   newGame,
+  openEvents,
+  selectEvent,
   normalize,
   submitPrediction,
   timelineProgress,
@@ -142,7 +144,7 @@ export function mount(el: HTMLElement): void {
   codex = loadCodex();
   autoWalk = loadAutoWalk();
   const saved = load();
-  state = saved && getCareer(saved.careerId) ? saved : null;
+  state = saved && getCareer(saved.careerId) && Array.isArray(saved.done) ? saved : null;
   render();
 }
 
@@ -158,7 +160,7 @@ function leaveStage(dispose: boolean): void {
 }
 
 /** 遊玩畫面上方的 3D 場景；沒有場景或不支援 WebGL 時隱藏，退回純卡片 */
-function updateStage(career: Career, s: GameState, e: GameEvent): void {
+function updateStage(career: Career, s: GameState, e: GameEvent | null): void {
   if (!hasScene(career.id)) return leaveStage(false);
   stageEl.hidden = false;
   if (!scene || sceneCareerId !== career.id) {
@@ -170,12 +172,29 @@ function updateStage(career: Career, s: GameState, e: GameEvent): void {
     stageEl.hidden = true;
     return;
   }
+  const open = openEvents(career, s);
+  const shown = new Set(open.map((o) => o.id));
+  if (e) shown.add(e.id);
   scene.setActive(true);
   scene.setFlags(s.flags);
   scene.setProgress(timelineProgress(career, s));
-  scene.focus(e.location, e.id);
-  const place = career.locations?.find((l) => l.id === e.location)?.name;
-  stageLabel.textContent = `${e.time}${place ? `・${place}` : ""}`;
+  scene.setEvents([...shown], e?.id);
+  const first = e ?? open[0];
+  if (first?.location) scene.place(first.location);
+
+  // 「！」標記：選事件時，每個有待辦、而且角色不在那裡的地點各一個（可以點）；走去處理某件事時，只標那一個
+  const placeName = (id: string | undefined) => career.locations?.find((l) => l.id === id)?.name;
+  const pool = e ? (!s.pendingOutcome && e.location && !scene.at(e.location) ? [e] : []) : open;
+  const byPlace = new Map<string, GameEvent[]>();
+  for (const o of pool) if (o.location && !scene.at(o.location)) byPlace.set(o.location, [...(byPlace.get(o.location) ?? []), o]);
+  scene.setGoals(
+    [...byPlace].map(([id, list]) => ({ id, name: placeName(id), count: list.length })),
+    e ? undefined : (placeId) => {
+      const target = byPlace.get(placeId)?.[0];
+      if (target && state) setState(selectEvent(career, state, target.id));
+    },
+  );
+  stageLabel.textContent = e ? `${e.time}${placeName(e.location) ? `・${placeName(e.location)}` : ""}` : `${open[0]?.time ?? ""}・${open.length} 件待辦`;
 }
 
 function render(): void {
@@ -355,7 +374,11 @@ function deltaHtml(effects: Partial<Record<Stat, number>>): string {
 
 function renderPlay(career: Career, s: GameState): void {
   const e = currentEvent(career, s);
-  if (!e) return setState(advance(career, s));
+  if (!e) {
+    const open = openEvents(career, s);
+    if (open.length === 0) return setState(advance(career, s));
+    return renderQuestBoard(career, s, open);
+  }
   updateStage(career, s, e);
   const head = `${backButton()}${timelineHtml(career, s, `${e.time}・${CATEGORY_LABELS[e.category]}`)}${statsHtml(s)}`;
   if (!s.pendingOutcome && scene && e.location && !scene.at(e.location)) return renderTravel(career, s, e, head);
@@ -410,6 +433,37 @@ function renderPlay(career: Career, s: GameState): void {
   });
   bindBack();
   bindTerms();
+}
+
+/** 同時有好幾件待辦：由玩家決定先做哪一件 */
+function renderQuestBoard(career: Career, s: GameState, open: GameEvent[]): void {
+  updateStage(career, s, null);
+  const placeName = (id: string | undefined) => career.locations?.find((l) => l.id === id)?.name;
+  const head = `${backButton()}${timelineHtml(career, s, `${open[0].time}・${open.length} 件待辦`)}${statsHtml(s)}`;
+  root.innerHTML = `
+    <main class="screen play">
+      ${head}
+      <article class="card guide">
+        <p class="kicker">同時有 ${open.length} 件事</p>
+        <h2>先處理哪一件？</h2>
+        <div class="quests">
+          ${open
+            .map(
+              (o) => `<button class="quest" data-id="${esc(o.id)}">
+                <span class="q-mark" aria-hidden="true">！</span>
+                <span class="q-main"><strong>${esc(o.title)}</strong>
+                <span class="muted">${esc(placeName(o.location) ?? "")}${placeName(o.location) ? "・" : ""}${CATEGORY_LABELS[o.category]}</span></span>
+              </button>`,
+            )
+            .join("")}
+        </div>
+        <p class="muted">順序由你決定，也可以直接點場景裡的「！」。處理完一件，剩下的還在。</p>
+      </article>
+    </main>`;
+  bindBack();
+  root.querySelectorAll<HTMLButtonElement>(".quest").forEach((b) =>
+    b.addEventListener("click", () => setState(selectEvent(career, s, b.dataset.id!))),
+  );
 }
 
 /** 事件在別的地點：先出現「下一步」引導，按「帶我去」角色才走過去，到了才顯示事件 */

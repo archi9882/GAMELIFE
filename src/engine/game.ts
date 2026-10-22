@@ -1,4 +1,7 @@
 // 遊戲狀態機：predict → play → compare → result。純函式，方便測試。
+//
+// 事件依陣列順序進行，但同一個 `group` 的事件會「同時開放」：玩家可以用任意順序處理。
+// 一個群組在「沒有任何已符合前置旗標、又還沒做的事件」時結束，沒做到的事件就被略過。
 import {
   CATEGORIES,
   STATS,
@@ -22,9 +25,13 @@ export interface GameState {
   careerId: string;
   phase: Phase;
   prediction: Record<Category, number>;
-  /** 下一個要檢查的事件索引（在 career.events 中） */
+  /** 目前群組的第一個事件索引（在 career.events 中） */
   cursor: number;
-  /** 目前顯示中的事件；選完後顯示 outcome 時仍保留 */
+  /** 已處理完的事件 id */
+  done: string[];
+  /** 玩家選來處理的事件（同時有多件待辦時才會有值） */
+  active: string | null;
+  /** 剛選完選項、正在顯示結果敘述的事件 */
   pendingOutcome: { eventId: string; choiceIndex: number } | null;
   stats: Record<Stat, number>;
   traits: Record<Trait, number>;
@@ -46,6 +53,8 @@ export function newGame(career: Career): GameState {
     phase: "predict",
     prediction: evenPrediction(),
     cursor: 0,
+    done: [],
+    active: null,
     pendingOutcome: null,
     stats: { ...INITIAL_STATS },
     traits: zeroTraits(),
@@ -60,19 +69,42 @@ export function isAvailable(e: GameEvent, flags: readonly string[]): boolean {
   return (e.requires ?? []).every((f) => flags.includes(f));
 }
 
-/** 從 cursor 起找下一個符合前置旗標的事件索引；沒有則回傳 -1 */
-export function nextEventIndex(career: Career, cursor: number, flags: readonly string[]): number {
-  for (let i = cursor; i < career.events.length; i++) {
-    if (isAvailable(career.events[i], flags)) return i;
-  }
-  return -1;
+/** 從 start 起，同一個 group 的事件連續到哪裡結束（不含） */
+function groupEnd(career: Career, start: number): number {
+  const g = career.events[start].group;
+  if (!g) return start + 1;
+  let i = start + 1;
+  while (i < career.events.length && career.events[i].group === g) i++;
+  return i;
 }
 
+/** 目前群組裡還能做的事件（沒做過、前置旗標已符合） */
+export function openEvents(career: Career, s: GameState): GameEvent[] {
+  if (s.phase !== "play" || s.cursor >= career.events.length) return [];
+  return career.events
+    .slice(s.cursor, groupEnd(career, s.cursor))
+    .filter((e) => !s.done.includes(e.id) && isAvailable(e, s.flags));
+}
+
+/** 把游標推進到下一個還有事可做的群組；全部結束就進入對照 */
+function settle(career: Career, s: GameState): GameState {
+  let cursor = s.cursor;
+  while (cursor < career.events.length) {
+    const end = groupEnd(career, cursor);
+    const hasOpen = career.events.slice(cursor, end).some((e) => !s.done.includes(e.id) && isAvailable(e, s.flags));
+    if (hasOpen) break;
+    cursor = end;
+  }
+  return cursor >= career.events.length ? { ...s, cursor, active: null, phase: "compare" } : { ...s, cursor };
+}
+
+/** 目前畫面上的事件；同時有多件待辦、還沒選時為 null */
 export function currentEvent(career: Career, s: GameState): GameEvent | null {
   if (s.phase !== "play") return null;
-  if (s.pendingOutcome) return career.events.find((e) => e.id === s.pendingOutcome!.eventId) ?? null;
-  const i = nextEventIndex(career, s.cursor, s.flags);
-  return i < 0 ? null : career.events[i];
+  const id = s.pendingOutcome?.eventId ?? s.active;
+  if (id) return career.events.find((e) => e.id === id) ?? null;
+  const open = openEvents(career, s);
+  return open.length === 1 ? open[0] : null;
 }
 
 /** 把預測正規化成加總 100 的整數（最大餘數法） */
@@ -91,8 +123,14 @@ export function normalize(pred: Record<Category, number>): Record<Category, numb
 }
 
 export function submitPrediction(career: Career, s: GameState, pred: Record<Category, number>): GameState {
-  const next: GameState = { ...s, prediction: normalize(pred), phase: "play", cursor: 0 };
-  return nextEventIndex(career, 0, next.flags) < 0 ? { ...next, phase: "compare" } : next;
+  return settle(career, { ...s, prediction: normalize(pred), phase: "play", cursor: 0, done: [], active: null, pendingOutcome: null });
+}
+
+/** 同時有多件待辦時，選一件來處理 */
+export function selectEvent(career: Career, s: GameState, eventId: string): GameState {
+  if (s.pendingOutcome) throw new Error("請先看完目前的結果");
+  if (!openEvents(career, s).some((e) => e.id === eventId)) throw new Error(`事件 ${eventId} 現在不能處理`);
+  return { ...s, active: eventId };
 }
 
 export function choose(career: Career, s: GameState, choiceIndex: number): GameState {
@@ -111,17 +149,15 @@ export function choose(career: Career, s: GameState, choiceIndex: number): GameS
     traits,
     flags,
     log: [...s.log, { eventId: e.id, choiceIndex }],
-    cursor: career.events.indexOf(e) + 1,
+    done: [...s.done, e.id],
+    active: e.id,
     pendingOutcome: { eventId: e.id, choiceIndex },
   };
 }
 
-/** 看完結果敘述後前進；沒有後續事件就進入對照 */
+/** 看完結果敘述後前進；群組做完就換下一個，沒有後續事件就進入對照 */
 export function advance(career: Career, s: GameState): GameState {
-  if (s.phase === "play") {
-    const cleared = { ...s, pendingOutcome: null };
-    return nextEventIndex(career, cleared.cursor, cleared.flags) < 0 ? { ...cleared, phase: "compare" } : cleared;
-  }
+  if (s.phase === "play") return settle(career, { ...s, pendingOutcome: null, active: null });
   if (s.phase === "compare") return { ...s, phase: "result" };
   return s;
 }
@@ -133,7 +169,7 @@ export function timelineProgress(career: Career, s: GameState): number {
   const end = toMin(career.dayEnd);
   if (s.phase === "predict") return 0;
   if (s.phase !== "play") return 1;
-  const e = currentEvent(career, s);
+  const e = currentEvent(career, s) ?? openEvents(career, s)[0];
   return e ? (toMin(e.time) - start) / (end - start) : 1;
 }
 
