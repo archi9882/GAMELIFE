@@ -151,6 +151,7 @@ function setState(s: GameState | null): void {
 
 export function mount(el: HTMLElement): void {
   el.innerHTML = `<div id="stage" hidden><div id="stage-canvas"></div><span id="stage-label" class="stage-label"></span>
+    <button type="button" id="fs-toggle" class="fs-toggle" aria-pressed="false">全螢幕</button>
     <div id="stage-actions" class="stage-actions"></div>
     <div id="dpad" class="dpad" role="group" aria-label="移動" hidden>
       <button type="button" class="dpad-btn" data-dir="up" aria-label="上">▲</button>
@@ -164,6 +165,7 @@ export function mount(el: HTMLElement): void {
   stageActions = el.querySelector("#stage-actions")!;
   dpadEl = el.querySelector("#dpad")!;
   bindDpad();
+  bindFullscreen(el.querySelector<HTMLButtonElement>("#fs-toggle")!);
   root = el.querySelector("#ui")!;
   codex = loadCodex();
   autoWalk = loadAutoWalk();
@@ -245,7 +247,45 @@ function setWalkUi(on: boolean): void {
   }
 }
 
+// ── 全螢幕（沉浸模式）────────────────────────────────
+// 能用瀏覽器全螢幕的（桌機、Android）就用；iPhone Safari 不支援網頁元素全螢幕，
+// 所以一律套用沉浸模式：場景鋪滿畫面，事件與按鈕放在下方可捲動的面板。
+let immersive = false;
+let fsButton: HTMLButtonElement;
+
+/** 下方面板的高度（px），與 CSS 的 46dvh 一致 */
+const panelHeight = (): number => Math.round(window.innerHeight * 0.46);
+
+function setImmersive(on: boolean): void {
+  immersive = on;
+  document.body.classList.toggle("immersive", on);
+  fsButton.textContent = on ? "結束全螢幕" : "全螢幕";
+  fsButton.setAttribute("aria-pressed", String(on));
+  scene?.setBottomInset(on ? panelHeight() : 0);
+  if (on) {
+    document.documentElement.requestFullscreen?.().catch(() => undefined);
+  } else if (document.fullscreenElement) {
+    document.exitFullscreen?.().catch(() => undefined);
+  }
+}
+
+function bindFullscreen(btn: HTMLButtonElement): void {
+  fsButton = btn;
+  btn.addEventListener("click", () => setImmersive(!immersive));
+  // 使用者用瀏覽器的方式（Esc）離開全螢幕時，一起離開沉浸模式
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement && immersive) setImmersive(false);
+  });
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && immersive) setImmersive(false);
+  });
+  window.addEventListener("resize", () => {
+    if (immersive) scene?.setBottomInset(panelHeight());
+  });
+}
+
 function leaveStage(dispose: boolean): void {
+  if (immersive) setImmersive(false);
   setWalkUi(false);
   stageActions.replaceChildren();
   stageEl.hidden = true;

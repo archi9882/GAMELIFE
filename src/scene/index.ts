@@ -29,6 +29,8 @@ export interface SceneHandle {
   setProgress(p: number): void;
   /** false 時暫停渲染（不在遊玩畫面時） */
   setActive(active: boolean): void;
+  /** 畫面下方被面板蓋住的高度（px，全螢幕沉浸模式用）；0 表示沒有 */
+  setBottomInset(px: number): void;
   dispose(): void;
 }
 

@@ -342,6 +342,8 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   let sunNow = dayLight(0);
   let skyNow = sunNow.sky.clone();
 
+  /** 畫面下方被面板蓋住的高度（px）：鏡頭往上偏移一半，讓角色留在可見範圍中央 */
+  let bottomInset = 0;
   const resize = (): void => {
     const w = host.clientWidth;
     const h = host.clientHeight;
@@ -350,6 +352,8 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     renderer.setSize(w, h, false);
     const halfH = (cam.halfW * h) / w;
     Object.assign(camera, { left: -cam.halfW, right: cam.halfW, top: halfH, bottom: -halfH });
+    if (bottomInset > 0) camera.setViewOffset(w, h, 0, Math.min(bottomInset, h * 0.8) / 2, w, h);
+    else camera.clearViewOffset();
     camera.updateProjectionMatrix();
   };
   const ro = new ResizeObserver(resize);
@@ -531,6 +535,10 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
         sunNow = dayLight(progress);
         skyNow = sunNow.sky.clone();
       }
+    },
+    setBottomInset(px) {
+      bottomInset = Math.max(0, px);
+      size = { w: 0, h: 0 };
     },
     setActive(a) {
       active = a;
