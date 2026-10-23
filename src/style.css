@@ -147,7 +147,7 @@ input[type="range"] { width: 100%; height: 36px; accent-color: var(--accent); ma
   background: var(--fog); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
 }
 body.layout-card #stage::after { opacity: 1; pointer-events: auto; }
-body.layout-card .stage-label, body.layout-card .stage-actions, body.layout-card .dpad, body.layout-card .fs-toggle, body:not(.has-scene) .fs-toggle { display: none; }
+body.layout-card .stage-label, body.layout-card .fs-toggle, body:not(.has-scene) .fs-toggle { display: none; }
 @media (prefers-reduced-motion: reduce) { #stage::after { transition: none; } }
 .stage-label {
   position: absolute; left: 12px; top: calc(10px + env(safe-area-inset-top, 0px)); padding: 3px 12px; border-radius: 999px;
@@ -303,37 +303,6 @@ body.layout-card .stage-label, body.layout-card .stage-actions, body.layout-card
 .inv-test .inv-label { flex: 1; min-width: 0; }
 .inv-test .inv-mark { flex: none; }
 
-/* 自由走動：方向鍵與「處理」按鈕 */
-.dpad {
-  position: absolute; left: 8px; bottom: 8px; width: 132px; height: 132px;
-  display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(3, 44px);
-  touch-action: none; user-select: none; -webkit-user-select: none;
-}
-.dpad[hidden] { display: none; }
-.dpad-btn {
-  width: 44px; height: 44px; padding: 0; border-radius: 12px; font-size: 16px; line-height: 1;
-  background: var(--surface); color: var(--ink); border: 2px solid var(--ink); opacity: 0.6;
-  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
-}
-.dpad-btn:active { opacity: 1; background: var(--accent); color: var(--accent-ink); }
-.dpad-btn[data-dir="up"] { grid-column: 2; grid-row: 1; }
-.dpad-btn[data-dir="left"] { grid-column: 1; grid-row: 2; }
-.dpad-btn[data-dir="right"] { grid-column: 3; grid-row: 2; }
-.dpad-btn[data-dir="down"] { grid-column: 2; grid-row: 3; }
-.stage-actions {
-  position: absolute; right: 8px; bottom: 8px; max-width: calc(100% - 156px);
-  display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none;
-}
-.stage-actions:empty { display: none; }
-.stage-action {
-  pointer-events: auto; min-height: 44px; max-width: 100%; padding: 2px 10px; border-radius: 14px; text-align: left;
-  background: var(--accent); color: var(--accent-ink); border: 2px solid var(--ink); font-weight: 700; font-size: 0.8rem; line-height: 1.25;
-  overflow-wrap: anywhere;
-}
-.stage-action.more { background: var(--surface); color: var(--ink); }
-.stage-action:active { transform: scale(0.97); }
-.walk-hint { margin: 10px 0 0; }
-
 /* 「全螢幕」按鈕：只切換瀏覽器原生全螢幕（放在 #ui 之後，永遠在最上層） */
 .fs-toggle {
   position: fixed; z-index: 40; right: calc(8px + env(safe-area-inset-right, 0px)); top: calc(8px + env(safe-area-inset-top, 0px));
@@ -354,7 +323,7 @@ body.layout-card #ui .screen .card, body.layout-card #ui .screen .notice, body.l
 body.layout-card #ui .screen .slider, body.layout-card #ui .screen .codex-group, body.layout-card #ui .screen .secondary,
 body.layout-card #ui .screen .gloss, body.layout-card #ui .screen .result-card { background: var(--bg); }
 
-/* ── 遊玩版面：場景清楚可走動；手機下方面板、桌機左側浮動面板 ── */
+/* ── 面板版面（沒有第一人稱的場景用；v0.14 起軟體工程師是唯一職業，遊玩時用下方的文字 RPG 版面）：手機下方面板、桌機左側浮動面板 ── */
 body.layout-play { overflow: hidden; }
 body.layout-play #ui {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; height: 46vh; height: 46dvh; overflow-y: auto; overscroll-behavior: contain;
@@ -362,7 +331,6 @@ body.layout-play #ui {
   padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 body.layout-play #ui .screen { padding-top: 10px; }
-body.layout-play .dpad, body.layout-play .stage-actions { bottom: calc(46vh + 8px); bottom: calc(46dvh + 8px); }
 
 @media (min-width: 900px) {
   body.layout-card #ui { padding: 0 0 0 32px; }
@@ -371,8 +339,6 @@ body.layout-play .dpad, body.layout-play .stage-actions { bottom: calc(46vh + 8p
     left: 16px; top: 16px; bottom: 16px; right: auto; width: 520px; height: auto;
     border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow);
   }
-  body.layout-play .dpad { left: 568px; bottom: 16px; }
-  body.layout-play .stage-actions { bottom: 16px; right: 16px; max-width: calc(100% - 552px - 172px); }
   body.layout-play .stage-label { left: 568px; }
 }
 
@@ -387,14 +353,7 @@ body.layout-play .dpad, body.layout-play .stage-actions { bottom: calc(46vh + 8p
 .status-you { color: #f2c230; font-weight: 700; white-space: nowrap; }
 .home-title { margin-bottom: 14px; }
 .home-sub { margin: 4px 0 0; color: var(--muted); font-size: 1.05rem; }
-.career-switch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); }
-.career-switch .career {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0;
-  min-height: 52px; padding: 6px 4px; border-radius: 10px; border: 0; background: transparent; color: var(--ink); font-weight: 600; font-size: 0.92rem; line-height: 1.25; text-align: center;
-}
-.career-switch .career[aria-pressed="true"] { background: var(--surface); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); color: var(--accent); }
-.career-switch .career-name { overflow-wrap: anywhere; }
-.career-switch .entry-tag { padding: 0 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; background: var(--warn-bg); color: var(--ink); border: 1px dashed var(--warn-line); }
+.home-sub .entry-tag { padding: 0 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; vertical-align: middle; background: var(--warn-bg); color: var(--ink); border: 1px dashed var(--warn-line); }
 .name-field { display: grid; gap: 4px; margin: 16px 0 0; font-size: 0.9rem; color: var(--muted); }
 .name-field input {
   font: inherit; font-size: 1rem; min-height: 44px; padding: 8px 12px; border-radius: 12px; width: 100%;
@@ -420,7 +379,7 @@ body.layout-play .dpad, body.layout-play .stage-actions { bottom: calc(46vh + 8p
 body.layout-rpg { overflow: hidden; }
 body.layout-rpg #ui { position: fixed; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }
 body.layout-rpg #ui .screen.rpg { position: absolute; inset: 0; max-width: none; margin: 0; padding: 0; overflow: hidden; }
-body.layout-rpg .stage-label, body.layout-rpg .stage-actions, body.layout-rpg .dpad { display: none; }
+body.layout-rpg .stage-label { display: none; }
 
 .hud {
   pointer-events: auto; position: absolute; left: 0; right: 0; top: 0;

@@ -139,13 +139,9 @@ let root: HTMLElement;
 let stageEl: HTMLElement;
 let stageHost: HTMLElement;
 let stageLabel: HTMLElement;
-let stageActions: HTMLElement;
-let dpadEl: HTMLElement;
 let scene: SceneHandle | null = null;
 let sceneCareerId: string | null = null;
 let state: GameState | null = null;
-/** 選單上選中的職業（只在這次開啟期間記住） */
-let homeCareerId: string = careers[0].id;
 /** 玩家名字（可不填），存在 career-day:name:v1 */
 let playerName = "";
 let draft: Record<Category, number> | null = null;
@@ -160,21 +156,11 @@ function setState(s: GameState | null): void {
 
 export function mount(el: HTMLElement): void {
   // 「全螢幕」按鈕放在 #ui 之後（不在 #stage 裡），第一人稱的 HUD 蓋在場景上時按鈕仍在最上層
-  el.innerHTML = `<div id="stage" hidden><div id="stage-canvas"></div><span id="stage-label" class="stage-label"></span>
-    <div id="stage-actions" class="stage-actions"></div>
-    <div id="dpad" class="dpad" role="group" aria-label="移動" hidden>
-      <button type="button" class="dpad-btn" data-dir="up" aria-label="上">▲</button>
-      <button type="button" class="dpad-btn" data-dir="left" aria-label="左">◀</button>
-      <button type="button" class="dpad-btn" data-dir="right" aria-label="右">▶</button>
-      <button type="button" class="dpad-btn" data-dir="down" aria-label="下">▼</button>
-    </div></div><div id="ui"></div>
+  el.innerHTML = `<div id="stage" hidden><div id="stage-canvas"></div><span id="stage-label" class="stage-label"></span></div><div id="ui"></div>
     <button type="button" id="fs-toggle" class="fs-toggle" aria-pressed="false">全螢幕</button>`;
   stageEl = el.querySelector("#stage")!;
   stageHost = el.querySelector("#stage-canvas")!;
   stageLabel = el.querySelector("#stage-label")!;
-  stageActions = el.querySelector("#stage-actions")!;
-  dpadEl = el.querySelector("#dpad")!;
-  bindDpad();
   bindFullscreen(el.querySelector<HTMLButtonElement>("#fs-toggle")!);
   root = el.querySelector("#ui")!;
   window.addEventListener("resize", () => {
@@ -184,82 +170,8 @@ export function mount(el: HTMLElement): void {
   codex = loadCodex();
   playerName = loadName();
   autoWalk = loadAutoWalk();
-  const saved = load();
-  state = saved && getCareer(saved.careerId) && Array.isArray(saved.done) && Array.isArray(saved.inspected) ? saved : null;
+  state = load((id) => !!getCareer(id));
   render();
-}
-
-type Dir = "up" | "down" | "left" | "right";
-const padHeld: Record<Dir, boolean> = { up: false, down: false, left: false, right: false };
-const keyHeld: Record<Dir, boolean> = { up: false, down: false, left: false, right: false };
-const KEY_DIR: Record<string, Dir> = {
-  ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
-  w: "up", W: "up", s: "down", S: "down", a: "left", A: "left", d: "right", D: "right",
-};
-
-/** 合併螢幕方向鍵與鍵盤，送給場景（畫面相對：右 +x、下 +z） */
-function pushMove(): void {
-  const h = (d: Dir): number => (padHeld[d] || keyHeld[d] ? 1 : 0);
-  scene?.setMove(h("right") - h("left"), h("down") - h("up"));
-}
-
-function clearMove(): void {
-  for (const d of Object.keys(padHeld) as Dir[]) padHeld[d] = keyHeld[d] = false;
-  scene?.setMove(0, 0);
-}
-
-function onKeyDown(ev: KeyboardEvent): void {
-  const d = KEY_DIR[ev.key];
-  const t = ev.target as HTMLElement | null;
-  if (!d || ev.ctrlKey || ev.metaKey || ev.altKey || (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-  ev.preventDefault(); // 方向鍵不要捲動頁面
-  keyHeld[d] = true;
-  pushMove();
-}
-
-function onKeyUp(ev: KeyboardEvent): void {
-  const d = KEY_DIR[ev.key];
-  if (!d) return;
-  keyHeld[d] = false;
-  pushMove();
-}
-
-/** 螢幕方向鍵：按住走、放開停（指標離開按鈕或被取消也停） */
-function bindDpad(): void {
-  dpadEl.querySelectorAll<HTMLButtonElement>(".dpad-btn").forEach((b) => {
-    const dir = b.dataset.dir as Dir;
-    const stop = (): void => {
-      padHeld[dir] = false;
-      pushMove();
-    };
-    b.addEventListener("pointerdown", (ev) => {
-      ev.preventDefault();
-      padHeld[dir] = true;
-      pushMove();
-    });
-    b.addEventListener("pointerup", stop);
-    b.addEventListener("pointercancel", stop);
-    b.addEventListener("pointerleave", stop);
-    b.addEventListener("contextmenu", (ev) => ev.preventDefault());
-  });
-}
-
-/** 開關自由走動的操作介面（方向鍵 UI 與鍵盤）；離開遊玩畫面或事件開始時關閉 */
-function setWalkUi(on: boolean): void {
-  const was = !dpadEl.hidden;
-  scene?.setWalkEnabled(on);
-  dpadEl.hidden = !on;
-  stageEl.classList.toggle("walkable", on);
-  if (on) {
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("blur", clearMove);
-  } else {
-    window.removeEventListener("keydown", onKeyDown);
-    window.removeEventListener("keyup", onKeyUp);
-    window.removeEventListener("blur", clearMove);
-    if (was) clearMove();
-  }
 }
 
 /** 第一人稱：左右方向鍵轉頭（不能走動）；在輸入框裡不攔截 */
@@ -309,8 +221,8 @@ function travelTo(career: Career, eventId: string, location: string): void {
 
 // ── 版面：場景常駐背景＋浮動卡片 ─────────────────────
 // 場景一直鋪滿畫面（position: fixed）。選單、預測、對照、結算是「卡片」版面：場景霧化、鏡頭慢慢環繞，
-// 卡片在桌機靠左、手機在中央偏下，頁面可捲動。遊玩是「面板」版面：場景清楚可走動，
-// 面板在手機是下方可捲動的面板（46dvh）、桌機是左側浮動卡片。
+// 卡片在桌機靠左、手機在中央偏下，頁面可捲動。遊玩時有場景（第一人稱）是文字 RPG 版面；
+// 沒有場景（不支援 WebGL）時退回卡片版面。「面板」版面（手機下方 46dvh、桌機左側浮動卡片）保留給沒有第一人稱的場景。
 // 「全螢幕」按鈕只切換瀏覽器原生全螢幕；不支援的瀏覽器（例如 iPhone Safari）隱藏按鈕。
 type Layout = "card" | "play";
 let layout: Layout = "card";
@@ -388,7 +300,6 @@ function exitFullscreen(): void {
 function disposeScene(): void {
   walking = false;
   setRpg(false);
-  setWalkUi(false);
   setLookUi(false);
   scene?.dispose();
   scene = null;
@@ -417,9 +328,7 @@ function ensureScene(careerId: string, mode: "home" | "game"): SceneHandle | nul
 
 /** 卡片畫面的背景：同一個職業的場景，霧化＋展示模式；沒有場景時退回純卡片 */
 function showBackdrop(career: Career, mode: "home" | "game", progress: number): void {
-  setWalkUi(false);
   setLookUi(false);
-  stageActions.replaceChildren();
   stageLabel.textContent = "";
   exitFullscreen();
   const sc = ensureScene(career.id, mode);
@@ -437,13 +346,11 @@ function showBackdrop(career: Career, mode: "home" | "game", progress: number): 
 }
 
 /** 遊玩畫面上方的 3D 場景；沒有場景或不支援 WebGL 時隱藏，退回純卡片 */
-function updateStage(career: Career, s: GameState, e: GameEvent | null, walk = true): void {
+function updateStage(career: Career, s: GameState, e: GameEvent | null): void {
   ensureScene(career.id, "game");
   stageEl.hidden = !scene;
   if (!scene) {
-    setWalkUi(false);
     setLookUi(false);
-    stageActions.replaceChildren();
     setLayout("card");
     return;
   }
@@ -480,60 +387,17 @@ function updateStage(career: Career, s: GameState, e: GameEvent | null, walk = t
       else setState(selectEvent(career, state, target.id));
     },
   );
-  // 自由走動：只在選事件（任務板）與前往途中開放；事件內容顯示時不能走開
-  const canMove = walk && scene.canWalk() && (e ? !s.pendingOutcome && !!e.location && !scene.at(e.location) : true);
-  setWalkUi(canMove);
+  // 到了新地點（第一人稱傳送完成）就重畫，事件在漸亮時就出現
   scene.onNearbyChange(() => {
     if (state?.phase === "play") render();
   });
   // 第一人稱：事件就在這裡時，鏡頭轉向事件的人或物件
   if (fp && e?.location && scene.at(e.location)) void scene.fadeTo(e.location, { eventId: e.id });
-  // 任務板：走到有待辦的地點附近，場景右下角出現「處理：○○」
-  stageActions.replaceChildren();
-  // 文字 RPG 版面：待辦清單在對話框裡，不另外放「處理：○○」按鈕
-  if (!e && (canMove || fp) && !rpg) {
-    const near = new Set(scene.nearby());
-    // 第一人稱：不能走動，所以別處的事也列出來（這裡的排前面），按了就漸黑傳送過去
-    const here = fp
-      ? walking
-        ? []
-        : [...open.filter((o) => o.location && near.has(o.location)), ...open.filter((o) => o.location && !near.has(o.location))]
-      : open.filter((o) => o.location && near.has(o.location));
-    for (const o of here.slice(0, 2)) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "stage-action";
-      b.textContent = `處理：${o.title}`;
-      b.addEventListener("click", () => {
-        if (!state || walking) return;
-        const elsewhere = fp && !!o.location && !near.has(o.location);
-        if (elsewhere) walking = true; // 先標記，避免「之後自動帶我去」重複觸發
-        setState(selectEvent(career, state, o.id));
-        if (elsewhere && scene) {
-          walking = false;
-          travelTo(career, o.id, o.location!);
-          render();
-        }
-      });
-      stageActions.appendChild(b);
-    }
-    if (here.length > 2) {
-      const more = document.createElement("button");
-      more.type = "button";
-      more.className = "stage-action more";
-      more.textContent = `還有 ${here.length - 2} 件`;
-      more.addEventListener("click", () => {
-        const q = root.querySelector<HTMLElement>(".quest");
-        q?.scrollIntoView({ block: "center", behavior: "smooth" });
-        q?.focus();
-      });
-      stageActions.appendChild(more);
-    }
-  }
   stageLabel.textContent = e ? `${timeLabel(career, s, e.time)}${placeName(e.location) ? `・${placeName(e.location)}` : ""}` : `${open[0] ? timeLabel(career, s, open[0].time) : ""}・${open.length} 件待辦`;
 }
 
-const homeCareer = (): Career => getCareer(homeCareerId) ?? careers[0];
+/** 選單上的職業：v0.14 起只有軟體工程師（登錄表第一個） */
+const homeCareer = (): Career => careers[0];
 
 function render(): void {
   if (!state) {
@@ -577,13 +441,9 @@ function renderHome(): void {
   const first = career.events[0];
   const cast = sceneCast[career.id] ?? [];
   const p = progress(codex, careers);
-  const walkHint = !scene
-    ? ""
-    : scene.hasFirstPerson()
-      ? `<p class="muted home-hint">第一人稱視角：拖曳畫面（或按左右方向鍵）環顧四周，用「帶我去」移動</p>`
-      : scene.canWalk()
-      ? `<p class="muted home-hint">走動：方向鍵、WASD 或點地板</p>`
-      : `<p class="muted home-hint">這個場景用「帶我去」移動</p>`;
+  const walkHint = scene?.hasFirstPerson()
+    ? `<p class="muted home-hint">第一人稱視角：拖曳畫面（或按左右方向鍵）環顧四周，用「帶我去」移動</p>`
+    : "";
   root.innerHTML = `
     <main class="screen home">
       <p class="status-strip" aria-label="今天第一件事：${esc(first?.time ?? "")} ${esc(first?.title ?? "")}">
@@ -591,17 +451,8 @@ function renderHome(): void {
       </p>
       <header class="home-title">
         <h1>GAMELIFE</h1>
-        <p class="home-sub">${esc(career.name)}的一天</p>
+        <p class="home-sub" data-career="${esc(career.id)}">${esc(career.name)}的一天${career.entryTag ? ` <span class="entry-tag">${esc(career.entryTag)}</span>` : ""}</p>
       </header>
-      <div class="career-switch" role="group" aria-label="選擇職業">
-        ${careers
-          .map(
-            (c) => `<button type="button" class="career" data-id="${esc(c.id)}" aria-pressed="${c.id === career.id}">
-              <span class="career-name">${esc(c.name)}</span>${c.entryTag ? `<span class="entry-tag">${esc(c.entryTag)}</span>` : ""}
-            </button>`,
-          )
-          .join("")}
-      </div>
       <label class="name-field">
         <span>你的名字（可不填）</span>
         <input type="text" id="player-name" maxlength="${NAME_MAX}" autocomplete="nickname" value="${esc(playerName)}" placeholder="顯示在名牌與結算卡上" />
@@ -637,14 +488,6 @@ function renderHome(): void {
     render();
     window.scrollTo(0, 0);
   });
-  root.querySelectorAll<HTMLButtonElement>(".career").forEach((b) =>
-    b.addEventListener("click", () => {
-      if (b.dataset.id === homeCareerId) return;
-      homeCareerId = b.dataset.id!;
-      render();
-      root.querySelector<HTMLButtonElement>(`.career[data-id="${CSS.escape(homeCareerId)}"]`)?.focus();
-    }),
-  );
   const nameInput = root.querySelector<HTMLInputElement>("#player-name")!;
   nameInput.addEventListener("input", () => {
     playerName = nameInput.value.trim().slice(0, NAME_MAX);
@@ -791,7 +634,6 @@ function renderPlay(career: Career, s: GameState): void {
   updateStage(career, s, e);
   if (rpg) return renderRpgEvent(career, s, e);
   const head = `${backButton()}${timelineHtml(career, s, `${timeLabel(career, s, e.time)}・${CATEGORY_LABELS[e.category]}`)}${statsHtml(s)}`;
-  if (!s.pendingOutcome && scene && e.location && !scene.at(e.location)) return renderTravel(career, s, e, head);
   const itr = currentInterrupt(career, s);
   if (itr) return renderInterrupt(career, s, itr, head);
   if (s.pendingOutcome) {
@@ -1369,7 +1211,7 @@ function renderInterrupt(career: Career, s: GameState, itr: Interrupt, head: str
 
 /** 時間到：其餘還開著的事件來不及處理，逐件說明後果 */
 function renderExpired(career: Career, s: GameState): void {
-  if (s.phase === "play") updateStage(career, s, null, false);
+  if (s.phase === "play") updateStage(career, s, null);
   if (rpg && s.phase === "play") return renderRpgExpired(career, s);
   const items = (s.expired ?? []).map((id) => career.events.find((e) => e.id === id)).filter((e): e is GameEvent => !!e);
   root.innerHTML = `
@@ -1424,45 +1266,6 @@ function renderQuestBoard(career: Career, s: GameState, open: GameEvent[]): void
   root.querySelectorAll<HTMLButtonElement>(".quest").forEach((b) =>
     b.addEventListener("click", () => setState(selectEvent(career, s, b.dataset.id!))),
   );
-}
-
-/** 事件在別的地點：先出現「下一步」引導，按「帶我去」角色才走過去，到了才顯示事件 */
-function renderTravel(career: Career, s: GameState, e: GameEvent, head: string): void {
-  const place = career.locations?.find((l) => l.id === e.location)?.name ?? "下一個地點";
-  root.innerHTML = `
-    <main class="screen play">
-      ${head}
-      <article class="card guide">
-        <p class="kicker">下一步</p>
-        <h2>前往：${esc(place)}</h2>
-        <p class="muted">${esc(e.time)}・${CATEGORY_LABELS[e.category]}，有事情需要你處理。看場景裡的「！」標記。</p>
-        <button class="primary" id="go-there" ${walking ? "disabled" : ""}>${walking ? (scene?.viewMode() === "first" ? "前往中…" : "走過去中…") : "帶我去"}</button>
-        ${scene?.canWalk() ? `<p class="muted walk-hint">也可以自己走過去（點地板或用方向鍵）</p>` : ""}
-        <label class="auto-walk"><input type="checkbox" id="auto-walk" ${autoWalk ? "checked" : ""} /> 之後自動帶我去</label>
-      </article>
-    </main>`;
-  bindBack();
-  const go = (): void => {
-    if (walking || !scene) return;
-    if (scene.viewMode() === "first") {
-      travelTo(career, e.id, e.location!);
-      if (walking) render();
-      return;
-    }
-    walking = true;
-    scene.goTo(e.location!, () => {
-      walking = false;
-      if (state && currentEvent(career, state)?.id === e.id) render();
-    });
-    if (walking) render();
-  };
-  root.querySelector("#go-there")!.addEventListener("click", go);
-  root.querySelector<HTMLInputElement>("#auto-walk")!.addEventListener("change", (ev) => {
-    autoWalk = (ev.target as HTMLInputElement).checked;
-    saveAutoWalk(autoWalk);
-    if (autoWalk) go();
-  });
-  if (autoWalk && !walking) go();
 }
 
 function biggestGapText(career: Career, s: GameState): string {
@@ -1531,32 +1334,20 @@ function renderResult(career: Career, s: GameState): void {
       </article>
       <article class="card next-steps">
         <h2>接下來</h2>
-        <p>同一個人、不同的工作：換一份工作再過一天，比較兩張結算卡，看看你的選擇會不會一樣。</p>
+        <p>同一份工作、不同的選擇：再過一天，試試這次沒選的回應，比較兩張結算卡，看看結果差多少。</p>
         <div class="next-actions">
-          ${careers
-            .filter((c) => c.id !== career.id)
-            .map(
-              (c) =>
-                `<button class="secondary switch-career" data-id="${c.id}">換成${esc(c.name)}${c.entryTag ? `<span class="entry-tag">${esc(c.entryTag)}</span>` : ""}</button>`,
-            )
-            .join("")}
-          <button class="secondary" id="replay">再玩一次${esc(career.name)}</button>
+          <button class="secondary" id="replay">再玩一次</button>
         </div>
       </article>
       <p class="muted">${DISCLAIMER}</p>
       <button class="link" id="again">← 回到選單</button>
     </main>`;
   root.querySelector("#again")!.addEventListener("click", () => setState(null));
-  const start = (c: Career): void => {
-    homeCareerId = c.id;
+  root.querySelector("#replay")!.addEventListener("click", () => {
     draft = null;
-    setState(newGame(c));
+    setState(newGame(career));
     window.scrollTo(0, 0);
-  };
-  root.querySelector("#replay")!.addEventListener("click", () => start(career));
-  root.querySelectorAll<HTMLButtonElement>(".switch-career").forEach((b) =>
-    b.addEventListener("click", () => start(getCareer(b.dataset.id!)!)),
-  );
+  });
 }
 
 function backButton(): string {

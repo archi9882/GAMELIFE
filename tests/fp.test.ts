@@ -20,7 +20,7 @@ import {
   type Aabb,
   type FpView,
 } from "../src/scene/fp";
-import { SWE_FP_VIEWS, SWE_NAV, SWE_PLACE_IDS, SWE_SCREENS, SWE_TASK_SCREENS } from "../src/scene/swe";
+import { SWE_FLOOR, SWE_FP_VIEWS, SWE_PLACE_IDS, SWE_SCREENS, SWE_TASK_SCREENS } from "../src/scene/swe";
 import { getCareer } from "../content/index";
 
 /** 與 three.js 相同的前方向量：yaw=0 朝 -z */
@@ -106,7 +106,7 @@ describe("viewFor", () => {
 
 describe("SWE first-person views", () => {
   const career = getCareer("swe")!;
-  const inside = (x: number, z: number) => SWE_NAV.walkable.some((r) => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1);
+  const inside = (x: number, z: number) => x >= SWE_FLOOR.x0 && x <= SWE_FLOOR.x1 && z >= SWE_FLOOR.z0 && z <= SWE_FLOOR.z1;
   it("every scene place has a view, at eye height, inside the office", () => {
     for (const id of SWE_PLACE_IDS) {
       const v = SWE_FP_VIEWS[id];

@@ -8,6 +8,8 @@
 
 第一版職業：**高中老師、軟體工程師、水電工**（節奏差異大：學期循環 / 專案迭代 / 現場工班）。
 
+**目前職業（v0.14 起）：只有軟體工程師**。高中老師與水電工已於 2026-10-23 依使用者決定刪除，見文末附錄「刪除高中老師（v0.13）」與「刪除水電工（v0.14）」；以下歷史附錄中提到老師或水電工的段落保留為紀錄。
+
 ## 1. 核心循環
 
 | 階段 | 玩家做什麼 | 設計重點 |
@@ -36,7 +38,7 @@ type Category = "core" | "communicate" | "admin" | "wait" | "learn";
 type Stat = "energy" | "time" | "trust";
 
 interface Career {
-  id: string;                 // "teacher" | "swe" | "plumber"
+  id: string;                 // "swe"（"teacher" 已於 v0.13、"plumber" 已於 v0.14 刪除）
   name: string;               // 顯示名稱
   intro: string;              // 開場 2–3 句
   dayStart: string;           // "07:30"
@@ -79,7 +81,7 @@ interface Source {
 - 每職業 8–14 個事件（v0.10 起上限 14），至少 2 個帶「成就感」標籤。
 - 每個選項都要有代價，禁止「明顯正確答案」。
 - 每個選項的 outcome 都要寫出一個具體好處與一個具體代價；不用道德或內疚語氣。效率、拒絕、轉介、走標準流程這類選項，也要有明確的正面後果。
-- 一場中至少出現一個「我以為這份工作不用做這個」的事件（例如老師的行政、工程師的開會、水電的報價溝通）。
+- 一場中至少出現一個「我以為這份工作不用做這個」的事件（例如工程師的開會、水電的報價溝通）。
 
 ## 3. 真實性政策（沒有從業者資料時）
 
@@ -89,9 +91,9 @@ interface Source {
 4. 預留「從業者回饋」欄位，未來有訪談再更新。
 
 ### 待查證資料（研究代理負責）
-- 高中老師：教學時數、行政工作與工時相關調查（例如 TALIS、教育部或教師團體公開調查）
+- ~~高中老師：教學時數、行政工作與工時相關調查（例如 TALIS、教育部或教師團體公開調查）~~（v0.13 刪除高中老師，不再需要）
 - 軟體工程師：開發者時間分配調查（例如大型開發者問卷、公開研究）
-- 水電工：工作內容與職安規範（勞動部職業介紹、職安署資料）、從業條件與證照
+- ~~水電工：工作內容與職安規範（勞動部職業介紹、職安署資料）、從業條件與證照~~（v0.14 刪除水電工，不再需要）
 
 > 規則：未找到來源前，不得寫入具體數字。
 
@@ -309,3 +311,35 @@ interface Location { id: string; name: string }
   - 地點標籤與人名在第一人稱時，被牆擋住就不顯示（`segmentBlocked`：眼睛到名牌的線段與「高 ≥ 2 且寬或深 ≥ 2」的方塊做 slab 測試，名牌前 0.3 以內的交點不算）；站在某地點時不顯示該地點自己的標籤（`placeTags[].at`）。軟體工程師辦公室是一個房間，從各視點看得到所有標籤；遮擋邏輯由單元測試驗證。
   - 燈光與材質（只在第一人稱，全部程式產生、不用貼圖）：半球光（天空冷色、地面暖色）與三盞不投影子的點光（茶水間暖光、會議室螢幕冷光、座位區）；螢幕、窗、電視改為不受光材質（看起來會發亮）；會議室地毯、座位區地墊、茶水間磁磚、站會區色牆、護牆板、踢腳板。
 - 純函式（`src/scene/fp.ts`，有單元測試）：`visibleTanV`、`screenDistance`、`screenPose`、`screenCorners`、`easeInOut`、`lerpPose`、`fitTaskRect`、`segmentBlocked`。
+
+### 刪除高中老師（v0.13，2026-10-23，使用者決定）
+- 範圍：完全刪除高中老師職業。刪除 `content/careers/teacher.json`、`src/scene/teacher.ts`（含 `TEACHER_NAV`、`TEACHER_PLACE_POS`、`TEACHER_PLACE_IDS`、`TEACHER_CAST`）、`research/teacher.md`；從職業登錄表（`content/index.ts`）與場景登錄表（`src/scene/index.ts` 的 builders、`sceneLocations`、`sceneCast`）移除。選單的職業切換、結算畫面的「換成○○」、名詞圖鑑與資料來源都由登錄表產生，自動只剩兩個職業。不改劇本格式、不改引擎。
+- 目前職業：**軟體工程師**（登錄表第一個，選單預設選中）、**水電工**（入口標示「待優化」）。
+- 舊資料相容：
+  - 存檔 `career-day:v3` 的 `careerId` 不在登錄表（例如 `"teacher"`）、JSON 壞掉或缺欄位時，視為沒有存檔、回到選單（`src/ui/storage.ts` 的 `parseSave`，有單元測試）。舊存檔不主動刪除，下次存檔時覆蓋。
+  - 圖鑑 `career-day:codex:v1` 裡的 `teacher` 紀錄原樣保留，但不顯示、不計入進度（`progress` 只走登錄表）。
+- 自由走動（v0.7）：原本只有老師在遊玩時能自由走動（水電工只能「帶我去」，軟體工程師是第一人稱），刪除後**沒有職業在遊玩時會用到點地板／方向鍵**（`canWalk()` 一律為 false）。共用程式（`kit.ts` 的 `walkable`／`blocked`、`nav.ts`、方向鍵 UI）保留給之後的場景；軟體工程師場景仍帶 `SWE_NAV`。導航測試改用合成的多房間地圖與軟體工程師資料。
+- 測試：原本以老師劇本驗證的引擎行為改用軟體工程師（群組：`late-morning`、`evening`；打斷：`i-s-support`；倒數與來不及：`late-morning`；查資料扣時：`s-review`）與水電工（前置旗標：`p-short`）；時間比例測試移除 TALIS。瀏覽器腳本中需要俯瞰職業的檢查改用水電工。
+- 文件：`docs/BACKLOG.md` 關閉 #7（老師專業小遊戲），#8 只剩水電工；`docs/classroom.md` 改以軟體工程師與水電工為例。`docs/review/`、`docs/proposals/` 為歷史文件，不改。
+
+### 刪除水電工（v0.14，2026-10-23，使用者決定）
+- 範圍：完全刪除水電工職業。刪除 `content/careers/plumber.json`、`src/scene/plumber.ts`（含 `PLUMBER_PLACE_IDS`、`PLUMBER_CAST`、漏水滴水效果）、`research/plumber.md`；從職業登錄表（`content/index.ts`）與場景登錄表（`src/scene/index.ts` 的 builders、`sceneLocations`、`sceneCast`）移除。不改劇本格式、不改引擎。
+- 目前職業：**只有軟體工程師**。登錄表仍是陣列，之後新增職業時呼叫端不用改。
+- 單一職業的畫面：
+  - 選單：拿掉職業切換（分段按鈕 `.career`），只顯示標題「GAMELIFE」與副標「軟體工程師的一天」（`.home-sub`，`data-career="swe"`）。劇本的 `entryTag`（入口標籤）欄位與驗證保留；有值時顯示在副標旁（目前沒有職業使用）。
+  - 結算畫面「接下來」：拿掉「換成○○」按鈕與「換一份工作比較」的說明，改為「同一份工作、不同的選擇：再過一天，試試這次沒選的回應，比較兩張結算卡」，只留「再玩一次」（`#replay`）與「← 回到選單」（`#again`）。
+  - 名詞圖鑑與資料來源只列軟體工程師。
+- 舊資料相容（同 v0.13）：
+  - 存檔 `career-day:v3` 的 `careerId` 為 `"plumber"` 時視為沒有存檔、回到選單（`parseSave`，單元測試涵蓋 `teacher` 與 `plumber`）。
+  - 圖鑑 `career-day:codex:v1` 裡的 `plumber` 紀錄原樣保留，但不顯示、不計入進度。
+- 自由走動與俯瞰遊玩（v0.3「帶我去」走路、v0.7 自由走動）：刪除水電工後沒有職業在遊玩時用俯瞰視角，**以下程式一併刪除**：
+  - `src/scene/nav.ts`（格子地圖、A* 找路、碰撞滑動）與 `tests/nav.test.ts`；`SceneDef.walkable`／`blocked`；軟體工程師場景的 `SWE_NAV`、`SWE_PLACE_POS`（第一人稱視點的範圍測試改用 `SWE_FLOOR`）。
+  - `kit.ts`：點地板找路、方向鍵推著走、`NpcDef.follow`（跟在玩家身後的學徒）；`SceneHandle` 的 `canWalk()`、`setWalkEnabled()`、`setMove()`。
+  - `app.ts`：方向鍵 UI（`#dpad`）、鍵盤 WASD／方向鍵走動、場景右下角的「處理：○○」按鈕（`#stage-actions`）、俯瞰的「帶我去」引導畫面（`renderTravel`）與「走過去中…」狀態、選單的走動提示。
+- 保留：
+  - 俯瞰展示（選單、預測、對照、結算的背景環繞鏡頭）與 `goTo` 的俯瞰路線（`SceneDef.route`，展示模式以外沒有呼叫端時也無害）。
+  - 第一人稱的「帶我去」漸黑傳送（`travelTo`／`fadeTo`）、「之後自動帶我去」（`career-day:autowalk:v1`）、`nearby()`／`onNearbyChange()`（傳送完成時重畫）。
+  - 面板版面（`layout-play`，手機下方 46dvh、桌機左側）的 CSS 與 `setLayout` 分支：目前只有沒有第一人稱的場景會用到（現在沒有），保留給之後的職業。沒有 WebGL 時遊玩走卡片版面（不變）。
+  - `allocationIsEstimate()` 與對照畫面的「此比例為推估」：通用邏輯，軟體工程師的來源沒有 `fiction`，所以目前不會出現；單元測試用合成資料覆蓋。
+- 測試：原本以水電工驗證的項目改用軟體工程師（前置旗標：`s-review` 選蓋章才出現 `s-bug-found`；狀態徽章：`ticket 進行中`／`ticket 已上線`；結果旗標：`s-deploy`）或合成資料（圖鑑「各職業分開記錄」、`allocationIsEstimate`、名詞驗證）。瀏覽器腳本中的俯瞰職業檢查改為「沒有 WebGL 時退回卡片版面」；倒數與打斷改用軟體工程師的文字 RPG 版面；自由走動腳本改為確認頁面上沒有方向鍵、點地板與方向鍵不會移動。
+- 文件：`docs/BACKLOG.md` 關閉 #8（水電工第一人稱）；`docs/classroom.md` 改為只用軟體工程師（兩堂課版本改為「同一份工作、不同選擇」比較）。`docs/review/`、`docs/proposals/` 為歷史文件，不改。

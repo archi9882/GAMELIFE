@@ -13,10 +13,24 @@ export function save(s: GameState | null): void {
   }
 }
 
-export function load(): GameState | null {
+/**
+ * 解析存檔：壞掉的 JSON、缺欄位、或 careerId 已不存在（例如 v0.13 刪除的高中老師 "teacher"、v0.14 刪除的水電工 "plumber"）都視為沒有存檔。
+ * 純函式，方便測試。
+ */
+export function parseSave(raw: string | null, isKnownCareer: (id: string) => boolean): GameState | null {
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as GameState) : null;
+    const s = JSON.parse(raw) as Partial<GameState> | null;
+    if (!s || typeof s !== "object" || typeof s.careerId !== "string" || !isKnownCareer(s.careerId)) return null;
+    return Array.isArray(s.done) && Array.isArray(s.inspected) ? (s as GameState) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function load(isKnownCareer: (id: string) => boolean): GameState | null {
+  try {
+    return parseSave(localStorage.getItem(KEY), isKnownCareer);
   } catch {
     return null;
   }

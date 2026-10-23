@@ -1,7 +1,6 @@
 // 軟體工程師場景：開放式辦公室（站會區、會議室、座位區、茶水間）。全部由方塊拼成。
 import { Group, MeshBasicMaterial, Vector3 } from "three";
 import type { SceneHandle } from "./index";
-import type { Rect } from "./nav";
 import { box, castOf, createStage, floorLabel, type Place, type SceneDef } from "./kit";
 import type { FpScreen, FpView } from "./fp";
 
@@ -14,22 +13,8 @@ const PLACES: Record<string, Place> = {
   newbie: P(12.1, 0, -4.4, "newbie"),
   pantry: P(1.2, 0, 0.9, "pantry"),
 };
-/** 自由走動：可走的辦公室地板與家具障礙 */
-const R = (x0: number, z0: number, x1: number, z1: number): Rect => ({ x0, z0, x1, z1 });
-export const SWE_NAV: { walkable: Rect[]; blocked: Rect[] } = {
-  walkable: [R(-0.9, -5.9, 16, 2.5)],
-  blocked: [
-    R(3.75, -6, 3.85, -1.2), // 會議室玻璃隔間（南端留出入口）
-    R(4.9, -4.5, 7.7, -3.3), // 會議桌
-    ...[5.3, 6.3, 7.3].flatMap((x) => [R(x - 0.25, -3.05, x + 0.25, -2.55), R(x - 0.25, -5.25, x + 0.25, -4.75)]), // 會議椅
-    // 四張辦公桌（含椅子）
-    ...[-2.6, -5.0].flatMap((z) => [10.6, 13.6].flatMap((x) => [R(x - 0.9, z - 0.45, x + 0.9, z + 0.45), R(x - 0.25, z + 0.7, x + 0.25, z + 1.2)])),
-    R(15.05, -1.35, 15.75, -0.65), // 盆栽
-    R(-0.4, 1.7, 2.8, 2.5), // 吧檯
-    R(2.4, 0.7, 3.6, 1.9), // 圓桌
-  ],
-};
-export const SWE_PLACE_POS: Record<string, { x: number; z: number }> = Object.fromEntries(Object.entries(PLACES).map(([id, p]) => [id, { x: p.pos.x, z: p.pos.z }]));
+/** 辦公室地板範圍（xz）：第一人稱的視點都要站在這裡面（測試用） */
+export const SWE_FLOOR = { x0: -0.9, z0: -5.9, x1: 16, z1: 2.5 };
 
 /** 主走道 z；各地點先走到走道，再沿走道移動，不穿過桌椅 */
 const AISLE_Z = 0.2;
@@ -198,7 +183,6 @@ const def: SceneDef = {
     { text: "座位區", pos: new Vector3(12.1, 3.1, -5.9), at: "desk" },
     { text: "茶水間", pos: new Vector3(1.2, 2.2, 2.1), at: "pantry" },
   ],
-  ...SWE_NAV,
   camera: { halfW: 8.2, target: new Vector3(3, 0.8, -1.5), minX: 2, maxX: 12.5, minZ: -3, maxZ: 1.5 },
   firstPerson: {
     views: SWE_VIEWS,

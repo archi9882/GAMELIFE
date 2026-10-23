@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { careers } from "../content/index";
-import { CATEGORIES, type Category } from "../content/schema";
+import { CATEGORIES, type Career, type Category } from "../content/schema";
+import { allocationIsEstimate } from "../src/engine/scoring";
 
 /** Meyer et al. (IEEE TSE 2021) Table 2，全部工作日欄（%）；休息不在遊戲五類內 */
 const MEYER_TABLE2 = {
@@ -18,12 +19,6 @@ function largestRemainder(values: Record<Category, number>): Record<Category, nu
   [...raw.keys()].sort((i, j) => raw[j] - Math.floor(raw[j]) - (raw[i] - Math.floor(raw[i]))).slice(0, rest).forEach((i) => out[i]++);
   return Object.fromEntries(CATEGORIES.map((c, i) => [c, out[i]])) as Record<Category, number>;
 }
-
-/** OECD TALIS 2018 Vol. I，Table I.2.29（upper secondary），Chinese Taipei，每週小時數 */
-const TALIS_TW_UPPER_SECONDARY = {
-  teaching: 18.7, planning: 8.01, teamwork: 3.14, marking: 3.95, counselling: 3.37, management: 4.4,
-  admin: 4.44, development: 2.76, parents: 1.61, extracurricular: 2.27, other: 2.01,
-};
 
 describe("時間比例的可追溯性", () => {
   it("原表加總為 100", () => {
@@ -43,28 +38,16 @@ describe("時間比例的可追溯性", () => {
     expect(swe.actualAllocation).toEqual(largestRemainder(grouped));
   });
 
-  it("老師的比例等於 TALIS 2018 Table I.2.29（臺灣高中職）依文件所述方式換算的結果", () => {
-    const t = TALIS_TW_UPPER_SECONDARY;
-    const grouped: Record<Category, number> = {
-      core: t.teaching + t.marking + t.extracurricular,
-      communicate: t.teamwork + t.counselling + t.parents,
-      admin: t.admin + t.management,
-      learn: t.planning + t.development,
-      wait: t.other,
-    };
-    const teacher = careers.find((c) => c.id === "teacher")!;
-    expect(teacher.actualAllocation).toEqual(largestRemainder(grouped));
+  it("來源含 fiction 的職業會被標成推估（v0.14 刪除水電工後用合成資料檢查）", () => {
+    const swe = careers.find((c) => c.id === "swe")!;
+    expect(allocationIsEstimate(swe)).toBe(false);
+    const estimated = structuredClone(swe) as Career;
+    estimated.allocationSources = [{ type: "fiction", title: "推估", note: "尚未查到公開數字" }];
+    expect(allocationIsEstimate(estimated)).toBe(true);
   });
 
-  it("尚未查到公開數字的職業（水電工），來源必須標示為 fiction（推估）", () => {
-    const plumber = careers.find((c) => c.id === "plumber")!;
-    expect(plumber.allocationSources.some((src) => src.type === "fiction")).toBe(true);
-  });
-
-  it("軟體工程師與老師的來源都是公開資料或報告，不含 fiction", () => {
-    for (const id of ["swe", "teacher"]) {
-      const c = careers.find((x) => x.id === id)!;
-      expect(c.allocationSources.every((src) => src.type !== "fiction")).toBe(true);
-    }
+  it("軟體工程師的來源都是公開資料或報告，不含 fiction", () => {
+    const swe = careers.find((x) => x.id === "swe")!;
+    expect(swe.allocationSources.every((src) => src.type !== "fiction")).toBe(true);
   });
 });

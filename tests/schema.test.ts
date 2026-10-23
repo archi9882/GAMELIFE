@@ -8,8 +8,8 @@ describe("劇本格式驗證", () => {
     expect(validateCareer(career)).toEqual([]);
   });
 
-  it("包含第一版三個職業", () => {
-    expect(careers.map((c) => c.id).sort()).toEqual(["plumber", "swe", "teacher"]);
+  it("只剩軟體工程師（v0.13 刪除高中老師、v0.14 刪除水電工）", () => {
+    expect(careers.map((c) => c.id)).toEqual(["swe"]);
   });
 
   it("能抓到明顯正解與無代價選項", () => {
@@ -33,38 +33,38 @@ describe("劇本格式驗證", () => {
   });
 
   it("名詞必須出現在文字中、解釋不可為空或過長", () => {
-    const bad = structuredClone(careers[2]) as Career;
+    const bad = structuredClone(careers.find((c) => c.id === "swe")!) as Career;
     bad.glossary = [
       { term: "不存在的詞", meaning: "x" },
-      { term: "報價", meaning: "" },
-      { term: "學徒", meaning: "字".repeat(81) },
+      { term: "站會", meaning: "" },
+      { term: "回滾", meaning: "字".repeat(81) },
     ];
     const errors = validateCareer(bad);
     expect(errors.some((e) => e.includes("不存在的詞") && e.includes("沒有出現"))).toBe(true);
-    expect(errors.some((e) => e.includes("報價") && e.includes("meaning"))).toBe(true);
-    expect(errors.some((e) => e.includes("學徒") && e.includes("meaning"))).toBe(true);
+    expect(errors.some((e) => e.includes("站會") && e.includes("meaning"))).toBe(true);
+    expect(errors.some((e) => e.includes("回滾") && e.includes("meaning"))).toBe(true);
   });
 
   it("有 locations 的職業，每個事件都要有合法 location", () => {
-    const plumber = careers.find((c) => c.id === "plumber")!;
-    expect(plumber.locations?.length).toBeGreaterThan(0);
-    const bad = structuredClone(plumber) as Career;
+    const swe = careers.find((c) => c.id === "swe")!;
+    expect(swe.locations?.length).toBeGreaterThan(0);
+    const bad = structuredClone(swe) as Career;
     bad.events[0].location = "mars";
     delete bad.events[1].location;
     const errors = validateCareer(bad);
     expect(errors.filter((e) => e.includes("location")).length).toBe(2);
   });
 
-  it("三個職業都有名詞折疊", () => {
+  it("每個職業都有名詞折疊", () => {
     for (const c of careers) expect(c.glossary?.length ?? 0).toBeGreaterThanOrEqual(5);
   });
 
   it("狀態徽章：旗標必須存在、預設規則放最後", () => {
-    const bad = structuredClone(careers[2]) as Career;
+    const bad = structuredClone(careers.find((c) => c.id === "swe")!) as Career;
     bad.statusBadges = [
       { label: "預設", tone: "ok" },
       { label: "鬼旗標", tone: "alert", flags: ["no_such_flag"] },
-      { label: "這個標籤實在是太長了超過上限", tone: "info", flags: ["found_leak"] },
+      { label: "這個標籤實在是太長了超過上限", tone: "info", flags: ["shipped"] },
     ];
     const errors = validateCareer(bad);
     expect(errors.some((e) => e.includes("no_such_flag"))).toBe(true);
@@ -82,13 +82,15 @@ describe("劇本格式驗證", () => {
     }
   });
 
-  it("三個職業都有 3D 場景", () => {
-    expect(careers.filter((c) => hasScene(c.id)).length).toBe(3);
+  it("每個職業都有 3D 場景", () => {
+    expect(careers.filter((c) => hasScene(c.id)).length).toBe(careers.length);
   });
 
-  it("入口標籤：水電工標示待優化，過長或空白會被擋下", () => {
-    expect(careers.find((c) => c.id === "plumber")!.entryTag).toBe("待優化");
+  it("入口標籤（選填）：合理長度通過，過長或空白會被擋下", () => {
+    expect(careers.find((c) => c.id === "swe")!.entryTag).toBeUndefined();
     const bad = structuredClone(careers[0]) as Career;
+    bad.entryTag = "待優化";
+    expect(validateCareer(bad)).toEqual([]);
     bad.entryTag = "這個標籤太長了吧";
     expect(validateCareer(bad).some((e) => e.includes("entryTag"))).toBe(true);
     bad.entryTag = "";
@@ -96,14 +98,14 @@ describe("劇本格式驗證", () => {
   });
 
   it("群組：必須相鄰、時間相同、至少 2 個事件", () => {
-    const base = careers.find((c) => c.id === "teacher")!;
+    const base = careers.find((c) => c.id === "swe")!;
     const apart = structuredClone(base) as Career;
-    apart.events[0].group = "x"; // t-morning
-    apart.events[3].group = "x"; // t-prep：中間隔了別的事件
+    apart.events[0].group = "x"; // s-standup
+    apart.events[3].group = "x"; // s-review：中間隔了別的事件
     expect(validateCareer(apart).some((e) => e.includes("必須相鄰"))).toBe(true);
 
     const diffTime = structuredClone(base) as Career;
-    diffTime.events[3].time = "09:30"; // t-prep 與同組的 t-form 時間不同
+    diffTime.events[3].time = "11:30"; // s-review 與同組的 s-postmortem 時間不同
     expect(validateCareer(diffTime).some((e) => e.includes("time 必須相同"))).toBe(true);
 
     const lonely = structuredClone(base) as Career;
@@ -111,12 +113,12 @@ describe("劇本格式驗證", () => {
     expect(validateCareer(lonely).some((e) => e.includes("至少要 2 個"))).toBe(true);
   });
 
-  it("三個職業都有至少一個同時開放的群組", () => {
+  it("每個職業都有至少一個同時開放的群組", () => {
     for (const c of careers) expect(c.events.some((e) => e.group)).toBe(true);
   });
 
   describe("打斷事件與倒數計時的驗證", () => {
-    const fresh = () => structuredClone(careers.find((c) => c.id === "teacher")!) as Career;
+    const fresh = () => structuredClone(careers.find((c) => c.id === "swe")!) as Career;
 
     it("打斷事件：during 必須存在、剛好 2 個選項、caller 不可過長、兩個選項都有代價且互不全面優於", () => {
       const c = fresh();
@@ -147,10 +149,10 @@ describe("劇本格式驗證", () => {
 
     it("時限：太緊（做不完）或太鬆（沒壓力）都會被擋下", () => {
       const tight = fresh();
-      tight.deadlines!["office-morning"] = 30;
+      tight.deadlines!["late-morning"] = 30;
       expect(validateCareer(tight).some((e) => e.includes("太緊"))).toBe(true);
       const loose = fresh();
-      loose.deadlines!["office-morning"] = 150;
+      loose.deadlines!["late-morning"] = 150;
       expect(validateCareer(loose).some((e) => e.includes("太鬆"))).toBe(true);
     });
 
@@ -162,7 +164,7 @@ describe("劇本格式驗證", () => {
 
     it("有時限的群組必須有 expire；沒有時限的群組不該有；expire 要有代價", () => {
       const missing = fresh();
-      delete missing.events.find((e) => e.id === "t-prep")!.expire;
+      delete missing.events.find((e) => e.id === "s-postmortem")!.expire;
       expect(validateCareer(missing).some((e) => e.includes("必須有 expire"))).toBe(true);
 
       const extra = fresh();
@@ -170,11 +172,11 @@ describe("劇本格式驗證", () => {
       expect(validateCareer(extra).some((e) => e.includes("不該有 expire"))).toBe(true);
 
       const free = fresh();
-      free.events.find((e) => e.id === "t-prep")!.expire = { effects: { trust: 5 }, outcome: "沒代價" };
+      free.events.find((e) => e.id === "s-postmortem")!.expire = { effects: { trust: 5 }, outcome: "沒代價" };
       expect(validateCareer(free).some((e) => e.includes("expire 至少要有一項資源為負"))).toBe(true);
     });
 
-    it("三個職業都有打斷事件與至少一個有時限的群組", () => {
+    it("每個職業都有打斷事件與至少一個有時限的群組", () => {
       for (const c of careers) {
         expect(c.interrupts?.length ?? 0).toBeGreaterThanOrEqual(2);
         expect(Object.keys(c.deadlines ?? {}).length).toBeGreaterThanOrEqual(1);

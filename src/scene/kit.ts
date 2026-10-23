@@ -1,4 +1,4 @@
-// 3D 場景共用元件：方塊、角色、走路、浮動名牌、相機跟隨、一天的光線。
+// 3D 場景共用元件：方塊、角色、浮動名牌、相機、一天的光線、第一人稱。
 // 各職業的場景只需提供 SceneDef（地圖、地點、路線、角色），其餘都在這裡。
 // 座標：x 向右、z 朝向玩家、y 向上；相機從 (+x, +y, +z) 往下看，所以 +x/+z 側的牆不畫（剖面）。
 // 有 firstPerson 的場景（軟體工程師）遊玩時改為第一人稱：透視相機在眼睛高度、地點間漸黑傳送，
@@ -20,7 +20,6 @@ import {
   OrthographicCamera,
   PCFSoftShadowMap,
   PerspectiveCamera,
-  Plane,
   PlaneGeometry,
   Raycaster,
   Vector2,
@@ -30,7 +29,6 @@ import {
   WebGLRenderer,
 } from "three";
 import type { SceneHandle } from "./index";
-import { buildGrid, findPath, slide, type Rect } from "./nav";
 import {
   aimAt,
   decay,
@@ -55,7 +53,7 @@ export type ViewMode = "iso" | "first";
 
 export interface Place {
   pos: Vector3;
-  /** 區域名稱，路線規劃用（例如 "out"、"in"、"attic"、教室 id） */
+  /** 區域名稱，路線規劃用（例如房間 id） */
   zone: string;
 }
 
@@ -78,8 +76,6 @@ export interface NpcDef {
   hat: number | null;
   pos: Vector3;
   yaw?: number;
-  /** 設定後會跟在玩家身後（dx, dz 為相對偏移），並留在地面 */
-  follow?: { dx: number; dz: number };
   visible: (c: Ctx) => boolean;
 }
 
@@ -93,10 +89,7 @@ export interface SceneDef {
   /** 地點標籤；at 是對應的地點 id（第一人稱站在該地點時不顯示自己的標籤） */
   placeTags: { text: string; pos: Vector3; at?: string }[];
   camera: { halfW: number; target: Vector3; minX: number; maxX: number; minZ: number; maxZ: number };
-  /** 自由走動：可走的地板與家具障礙（xz 矩形）。沒有 walkable 的場景（水電工）只能「帶我去」 */
-  walkable?: Rect[];
-  blocked?: Rect[];
-  /** 場景專屬的動態效果（例如滴水）；回傳 update，每幀呼叫 */
+  /** 場景專屬的動態效果；回傳 update，每幀呼叫 */
   extras?: (scene: Scene) => { update: (dt: number, t: number, ctx: Ctx, reduced: boolean) => void };
   /** 第一人稱：各地點的視點，以及只在第一人稱顯示的物件（天花板、補齊的牆、螢幕畫面、門窗） */
   firstPerson?: {
@@ -190,11 +183,9 @@ export function makePerson(shirt: number, pants: number, hat: number | null): Pe
 class Walker {
   route: Vector3[] = [];
   yaw = 0;
-  /** 方向鍵推著走（沒有路線，但也算在移動） */
-  pushed = false;
   constructor(readonly p: Person, readonly speed: number) {}
   get moving(): boolean {
-    return this.route.length > 0 || this.pushed;
+    return this.route.length > 0;
   }
   update(dt: number, t: number, bob: boolean): void {
     const pos = this.p.root.position;
@@ -230,12 +221,8 @@ function dayLight(p: number): { sun: Color; sky: Color; intensity: number } {
   return { sun: lerpColor(0xfff4e0, 0xff9a60, t), sky: lerpColor(0xd3e8f6, 0xf0b898, t), intensity: 1.7 - 0.5 * t };
 }
 
-/** 自由走動的速度（單位／秒）與「到達地點」的半徑 */
-const MOVE_SPEED = 4;
+/** 俯瞰時「到達地點」的半徑 */
 const NEAR_RADIUS = 1.5;
-const GROUND = new Plane(new Vector3(0, 1, 0), -0.1);
-const SCREEN_RIGHT = { x: Math.SQRT1_2, z: -Math.SQRT1_2 };
-const SCREEN_DOWN = { x: Math.SQRT1_2, z: Math.SQRT1_2 };
 
 export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | null {
   let renderer: WebGLRenderer;
@@ -265,7 +252,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     camera.position.set(camTarget.x + CAM_RADIUS * Math.sin(camAngle), camTarget.y + CAM_HEIGHT, camTarget.z + CAM_RADIUS * Math.cos(camAngle));
     camera.lookAt(camTarget);
   };
-  /** 展示模式（首頁與預測、對照、結算的背景）：鏡頭繞場景中心慢慢擺動，不能走動、不顯示「！」 */
+  /** 展示模式（首頁與預測、對照、結算的背景）：鏡頭繞場景中心慢慢擺動、不顯示「！」 */
   let showcase = false;
   const showcaseTarget = new Vector3((cam.minX + cam.maxX) / 2, 0.8, (cam.minZ + cam.maxZ) / 2);
   aimCamera();
@@ -353,7 +340,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   scene.add(player.p.root);
 
   const npcs = def.npcs.map((n) => {
-    const w = new Walker(makePerson(n.shirt, n.pants, n.hat), n.follow ? 4.4 : 0);
+    const w = new Walker(makePerson(n.shirt, n.pants, n.hat), 0);
     w.p.root.position.copy(n.pos);
     w.yaw = n.yaw ?? 0;
     w.p.body.rotation.y = w.yaw;
@@ -400,11 +387,6 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
   let goalTags: GoalTag[] = [];
   let onPick: ((placeId: string) => void) | undefined;
 
-  // 自由走動：格子地圖（沒有 walkable 的場景為 null）
-  const grid = def.walkable ? buildGrid(def.walkable, def.blocked ?? []) : null;
-  let moveVec = { x: 0, z: 0 };
-  /** 外部（app）可關閉自由走動：事件內容顯示時，點地板與方向輸入都不能讓角色走開 */
-  let walkEnabled = true;
   let nearbyCb: (() => void) | undefined;
   let nearbyKey = "";
 
@@ -451,32 +433,8 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     return Object.entries(def.places).filter(([, p]) => nearPlace(p)).map(([id]) => id);
   };
 
-  // 點地板：指標移動 < 8px 才算點擊（拖曳是捲動頁面）
   const raycaster = new Raycaster();
-  let down: { x: number; y: number } | null = null;
   const canvas = renderer.domElement;
-  if (grid) {
-    canvas.addEventListener("pointerdown", (ev) => {
-      down = { x: ev.clientX, y: ev.clientY };
-    });
-    canvas.addEventListener("pointercancel", () => {
-      down = null;
-    });
-    canvas.addEventListener("pointerup", (ev) => {
-      const d = down;
-      down = null;
-      if (!d || Math.hypot(ev.clientX - d.x, ev.clientY - d.y) >= 8 || arriveCb || !active || !walkEnabled || showcase || mode === "first") return;
-      const rect = canvas.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
-      const ndc = new Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
-      raycaster.setFromCamera(ndc, camera);
-      const hit = raycaster.ray.intersectPlane(GROUND, new Vector3());
-      if (!hit) return;
-      const pp = player.p.root.position;
-      const path = findPath(grid, { x: pp.x, z: pp.z }, { x: hit.x, z: hit.z });
-      player.route = path.map((q) => new Vector3(q.x, 0, q.z));
-    });
-  }
   let location: string | undefined;
   let eventId: string | undefined;
   let openIds: ReadonlySet<string> = new Set();
@@ -769,23 +727,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
       return;
     }
     if (arriveCb) return;
-    if (grid && next && !reduced) {
-      // 自由走動的場景：以角色目前的位置找路（角色可能已經走離 current）
-      const pp = player.p.root.position;
-      if (nearPlace(next) && !player.moving) {
-        location = id;
-        current = next;
-        visited.add(id);
-        onArrive?.();
-        return;
-      }
-      location = id;
-      current = next;
-      player.route = findPath(grid, { x: pp.x, z: pp.z }, { x: next.pos.x, z: next.pos.z }).map((q) => new Vector3(q.x, 0, q.z));
-      arriveCb = onArrive ?? (() => undefined);
-      return;
-    }
-    if (!next || !current || (grid ? nearPlace(next) : current === next)) {
+    if (!next || !current || current === next) {
       onArrive?.();
       return;
     }
@@ -846,23 +788,6 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     resize();
     const t = clock.elapsedTime;
     const ctx: Ctx = { location, event: eventId, open: openIds, flags, visited };
-    if (grid && walkEnabled && !showcase && !arriveCb && (moveVec.x !== 0 || moveVec.z !== 0)) {
-      // 方向鍵：取消點地板的路線，按住時以固定速度走，碰到家具沿邊滑動
-      player.route = [];
-      const len = Math.hypot(moveVec.x, moveVec.z);
-      const wx = (SCREEN_RIGHT.x * moveVec.x + SCREEN_DOWN.x * moveVec.z) / len;
-      const wz = (SCREEN_RIGHT.z * moveVec.x + SCREEN_DOWN.z * moveVec.z) / len;
-      const pos = player.p.root.position;
-      const next = slide(grid, { x: pos.x, z: pos.z }, wx * MOVE_SPEED * dt, wz * MOVE_SPEED * dt);
-      player.pushed = next.x !== pos.x || next.z !== pos.z;
-      if (player.pushed) {
-        pos.x = next.x;
-        pos.z = next.z;
-        player.yaw = Math.atan2(wx, wz);
-      }
-    } else {
-      player.pushed = false;
-    }
     player.update(dt, t, !reduced);
     if (arriveCb && !player.moving) {
       const cb = arriveCb;
@@ -874,16 +799,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
 
     for (const n of npcs) {
       n.w.p.root.visible = n.def.visible(ctx);
-      if (n.def.follow) {
-        const f = new Vector3(pp.x + n.def.follow.dx, 0, pp.z + n.def.follow.dz);
-        const np = n.w.p.root.position;
-        np.x += (f.x - np.x) * Math.min(1, dt * 3);
-        np.z += (f.z - np.z) * Math.min(1, dt * 3);
-        n.w.yaw = player.yaw;
-        n.w.p.body.rotation.y = player.yaw;
-        const moving = Math.hypot(f.x - np.x, f.z - np.z) > 0.15;
-        n.w.p.body.position.y = !reduced && moving ? Math.abs(Math.sin(t * 11)) * 0.12 : 0;
-      } else if (fp) {
+      if (fp) {
         // 第一人稱：附近（3.5 以內）的人轉頭面向你；遠了或回到俯瞰時轉回原本的方向
         const np = n.w.p.root.position;
         const cp = pcam.position;
@@ -895,7 +811,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     }
     extras?.update(dt, t, ctx, reduced);
 
-    if ((grid || fp) && !showcase) {
+    if (!showcase) {
       const key = nearbyIds().join(",");
       if (key !== nearbyKey) {
         nearbyKey = key;
@@ -903,7 +819,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
       }
     }
 
-    // 鏡頭跟著玩家（高度只跟一半，爬上夾層時不會晃太大）
+    // 俯瞰時鏡頭跟著玩家（高度只跟一半）
     // 展示模式：看場景中心，鏡頭在 45° 左右各約 30° 之間慢慢擺動（減少動態時靜止）
     const want = showcase
       ? showcaseTarget
@@ -973,7 +889,6 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
       location = id;
       player.p.root.position.copy(next.pos);
       camTarget.set(next.pos.x, 0.8 + next.pos.y * 0.5, next.pos.z);
-      for (const n of npcs) if (n.def.follow) n.w.p.root.position.set(next.pos.x + n.def.follow.dx, 0, next.pos.z + n.def.follow.dz);
       visited.add(id);
       current = next;
     },
@@ -1000,12 +915,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     at(id) {
       const p = id ? def.places[id] : undefined;
       if (mode === "first") return !!p && current === p && !teleporting;
-      if (grid) return !!p && nearPlace(p) && !player.moving && !arriveCb;
       return !!p && current === p && !arriveCb;
-    },
-    canWalk() {
-      // 第一人稱的場景遊玩時不能自由走動（只能漸黑傳送）
-      return !!grid && !fp;
     },
     hasFirstPerson() {
       return !!fp;
@@ -1018,14 +928,6 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
     setTurn(dir) {
       turn = camMode === "first" ? Math.max(-1, Math.min(1, dir)) : 0;
       if (turn !== 0) yawVel = 0;
-    },
-    setWalkEnabled(on) {
-      walkEnabled = on;
-      if (!on) moveVec = { x: 0, z: 0 };
-    },
-    setMove(dx, dz) {
-      if (!walkEnabled) return;
-      moveVec = { x: Math.max(-1, Math.min(1, dx)), z: Math.max(-1, Math.min(1, dz)) };
     },
     nearby: nearbyIds,
     onNearbyChange(cb) {
@@ -1072,11 +974,7 @@ export function createStage(host: HTMLElement, def: SceneDef): SceneHandle | nul
       }
       if (on === showcase) return;
       showcase = on;
-      if (on) {
-        moveVec = { x: 0, z: 0 };
-        player.pushed = false;
-        if (!arriveCb) player.route = [];
-      }
+      if (on && !arriveCb) player.route = [];
     },
     setPlayerName(name) {
       const n = name.trim();
