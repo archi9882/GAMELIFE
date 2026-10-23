@@ -1529,10 +1529,34 @@ function renderResult(career: Career, s: GameState): void {
         <h2>想一想</h2>
         <ul>${career.reflections.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
       </article>
+      <article class="card next-steps">
+        <h2>接下來</h2>
+        <p>同一個人、不同的工作：換一份工作再過一天，比較兩張結算卡，看看你的選擇會不會一樣。</p>
+        <div class="next-actions">
+          ${careers
+            .filter((c) => c.id !== career.id)
+            .map(
+              (c) =>
+                `<button class="secondary switch-career" data-id="${c.id}">換成${esc(c.name)}${c.entryTag ? `<span class="entry-tag">${esc(c.entryTag)}</span>` : ""}</button>`,
+            )
+            .join("")}
+          <button class="secondary" id="replay">再玩一次${esc(career.name)}</button>
+        </div>
+      </article>
       <p class="muted">${DISCLAIMER}</p>
-      <button class="secondary" id="again">換一份工作</button>
+      <button class="link" id="again">← 回到選單</button>
     </main>`;
   root.querySelector("#again")!.addEventListener("click", () => setState(null));
+  const start = (c: Career): void => {
+    homeCareerId = c.id;
+    draft = null;
+    setState(newGame(c));
+    window.scrollTo(0, 0);
+  };
+  root.querySelector("#replay")!.addEventListener("click", () => start(career));
+  root.querySelectorAll<HTMLButtonElement>(".switch-career").forEach((b) =>
+    b.addEventListener("click", () => start(getCareer(b.dataset.id!)!)),
+  );
 }
 
 function backButton(): string {

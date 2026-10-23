@@ -547,3 +547,7 @@ body.layout-rpg .fs-toggle {
 .card.call.phone.done { padding: 8px 16px; border-style: dashed; }
 .card.call.phone.done .kicker { color: #c9bfb2; }
 @media (min-width: 900px) { .hud .stats { max-width: 620px; } }
+
+/* 結算後的下一步 */
+.next-actions{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.next-actions button{min-height:44px;display:flex;align-items:center;justify-content:center;gap:6px}
