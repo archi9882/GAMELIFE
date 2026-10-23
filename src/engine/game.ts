@@ -10,6 +10,8 @@ import {
   INSPECT_MINUTES,
   TRAVEL_MINUTES,
   choiceMinutes,
+  deadlineSpec,
+  isAvailable as eventAvailable,
   type Category,
   type Choice,
   type GameEvent,
@@ -82,8 +84,9 @@ export function newGame(career: Career): GameState {
 
 const clamp = (v: number) => Math.max(0, Math.min(100, v));
 
+/** 事件這局是否會出現（requires 全符合，且 requiresAny 至少一個符合） */
 export function isAvailable(e: GameEvent, flags: readonly string[]): boolean {
-  return (e.requires ?? []).every((f) => flags.includes(f));
+  return eventAvailable(e, flags);
 }
 
 /** 從 start 起，同一個 group 的事件連續到哪裡結束（不含） */
@@ -163,11 +166,18 @@ function applyOutcome(s: GameState, effects: Partial<Record<Stat, number>>, trai
   return { ...s, stats, traits: t, flags: [...new Set([...s.flags, ...setFlags])] };
 }
 
-/** 目前群組的時限（分鐘）；沒有時限回傳 null */
+/**
+ * 目前群組的時限（分鐘）；沒有時限回傳 null。
+ * 時限 = 基本值 + 這局有出現（前置旗標已符合）的條件事件的加時。
+ */
 export function deadlineOf(career: Career, s: GameState): number | null {
   if (s.phase !== "play" || s.cursor >= career.events.length) return null;
   const g = career.events[s.cursor].group;
-  return g && career.deadlines?.[g] !== undefined ? career.deadlines[g] : null;
+  const raw = g ? career.deadlines?.[g] : undefined;
+  if (raw === undefined) return null;
+  const { base, extra } = deadlineSpec(raw);
+  const members = career.events.slice(s.cursor, groupEnd(career, s.cursor));
+  return base + members.reduce((a, e) => a + (extra[e.id] !== undefined && isAvailable(e, s.flags) ? extra[e.id] : 0), 0);
 }
 
 /** 剩餘分鐘；沒有時限回傳 null（可能為負，代表已超時） */

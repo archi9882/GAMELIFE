@@ -10,6 +10,8 @@ import {
   type GlossaryTerm,
   type Interrupt,
   type Investigation,
+  type InvestigationItem,
+  type InvestigationKind,
   type Source,
   type Stat,
 } from "../../content/schema";
@@ -731,7 +733,14 @@ function renderPlay(career: Career, s: GameState): void {
   const visible = [
     e.title,
     pages[bodyPage.index],
-    ...(last && inv ? [inv.prompt, ...inv.items.map((it) => it.label), ...opened.map((it) => it.detail)] : []),
+    ...(last && inv
+      ? [
+          inv.prompt,
+          ...(inv.kind === "review" ? [] : inv.items.map((it) => it.label)),
+          ...opened.flatMap((it) => [it.detail, it.why ?? ""]),
+          !investigating ? (inv.tip ?? "") : "",
+        ]
+      : []),
     ...(showChoices ? e.choices.map((c) => c.label) : []),
   ];
   root.innerHTML = `
@@ -769,27 +778,58 @@ function renderPlay(career: Career, s: GameState): void {
   bindTerms();
 }
 
-/** 查資料面板：任務說明、進度、資料卡；打開過的卡留著內容。查完後只剩已打開的內容 */
+/** 各種查資料外觀的用字：面板標題、進度單位、打開後的標示、扣時間提示 */
+const KIND_TEXT: Record<InvestigationKind, { kicker: string; unit: string; yes: string; no: string; each: string }> = {
+  info: { kicker: "查資料", unit: "份有關資料", yes: "有關 ✓", no: "無關", each: "每查一份資料" },
+  review: { kicker: "Code review", unit: "行可能有問題", yes: "有問題 ✓", no: "沒問題", each: "每看一行" },
+  debug: { kicker: "除錯", unit: "條有關線索", yes: "有關 ✓", no: "無關", each: "每看一條線索" },
+  test: { kicker: "寫測試", unit: "個該測的情況", yes: "該測 ✓", no: "不用測", each: "每考慮一個情況" },
+};
+
+/** 查資料面板：任務說明、進度、資料卡；打開過的卡留著內容與白話說明。外觀依 kind 而不同，判定相同 */
 function investigationHtml(career: Career, s: GameState, e: GameEvent, inv: Investigation, active: boolean): string {
-  const isOpen = (it: Investigation["items"][number]) => s.inspected.includes(`${e.id}:${it.id}`);
+  const kind: InvestigationKind = inv.kind ?? "info";
+  const t = KIND_TEXT[kind];
+  const isOpen = (it: InvestigationItem) => s.inspected.includes(`${e.id}:${it.id}`);
   const opened = inv.items.filter(isOpen);
   const total = inv.items.filter((it) => it.relevant).length;
   const found = opened.filter((it) => it.relevant).length;
-  const cards = inv.items
-    .map((it) => {
-      const o = isOpen(it);
-      const mark = o ? `<span class="inv-mark ${it.relevant ? "yes" : "no"}">${it.relevant ? "有關 ✓" : "無關"}</span>` : "";
-      return `<button type="button" class="inv-card ${o ? (it.relevant ? "yes" : "no") : ""}" data-id="${esc(it.id)}" ${o || !active ? "disabled" : ""}><span class="inv-label">${esc(it.label)}</span>${mark}</button>`;
-    })
-    .join("");
-  const hint = active && deadlineOf(career, s) !== null ? `<p class="muted inv-hint">每查一份資料花 ${INSPECT_MINUTES} 分鐘</p>` : "";
-  return `<section class="card inv" aria-label="查資料">
-    <p class="kicker">查資料</p>
+  const mark = (it: InvestigationItem) => (isOpen(it) ? `<span class="inv-mark ${it.relevant ? "yes" : "no"}">${it.relevant ? t.yes : t.no}</span>` : "");
+  const cls = (it: InvestigationItem) => `inv-card inv-${kind} ${isOpen(it) ? (it.relevant ? "yes" : "no") : ""}`;
+  const attrs = (it: InvestigationItem) => `type="button" data-id="${esc(it.id)}" ${isOpen(it) || !active ? "disabled" : ""}`;
+  const lineNo = (it: InvestigationItem) => inv.items.indexOf(it) + 1;
+  let cards: string;
+  if (kind === "review") {
+    cards = `<div class="inv-code">${inv.items
+      .map((it) => `<button ${attrs(it)} class="${cls(it)}"><span class="ln">${lineNo(it)}</span><code class="inv-label">${esc(it.label)}</code>${mark(it)}</button>`)
+      .join("")}</div>`;
+  } else if (kind === "test") {
+    cards = `<div class="inv-list">${inv.items
+      .map((it) => `<button ${attrs(it)} class="${cls(it)}"><span class="box" aria-hidden="true">${isOpen(it) ? (it.relevant ? "☑" : "☒") : "☐"}</span><span class="inv-label">${esc(it.label)}</span>${mark(it)}</button>`)
+      .join("")}</div>`;
+  } else {
+    const tag = (it: InvestigationItem) => (kind === "debug" && it.tag ? `<span class="inv-tag">${esc(it.tag)}</span>` : "");
+    cards = `<div class="inv-grid">${inv.items
+      .map((it) => `<button ${attrs(it)} class="${cls(it)}">${tag(it)}<span class="inv-label">${esc(it.label)}</span>${mark(it)}</button>`)
+      .join("")}</div>`;
+  }
+  const hint = active && deadlineOf(career, s) !== null ? `<p class="muted inv-hint">${t.each}花 ${INSPECT_MINUTES} 分鐘</p>` : "";
+  const why = (it: InvestigationItem) => (it.why ? `<span class="inv-why">${annotate(it.why, career)}</span>` : "");
+  const detail = (it: InvestigationItem) => {
+    if (kind === "review") return `<li><strong>第 ${lineNo(it)} 行</strong>：${annotate(it.detail, career)}${why(it)}</li>`;
+    if (kind === "debug") return `<li><strong>${annotate(it.label, career)}</strong><code class="inv-term">${esc(it.detail)}</code>${why(it)}</li>`;
+    return `<li><strong>${annotate(it.label, career)}</strong>：${annotate(it.detail, career)}${why(it)}</li>`;
+  };
+  const tip = !active && inv.tip ? `<p class="inv-tip"><strong>小知識：</strong>${annotate(inv.tip, career)}</p>` : "";
+  const pending = inv.reviewPending ? `<span class="inv-pending">內容待從業者審查</span>` : "";
+  return `<section class="card inv inv-kind-${kind}" aria-label="${t.kicker}">
+    <div class="inv-head"><p class="kicker">${t.kicker}</p>${pending}</div>
     <p class="inv-prompt">${annotate(inv.prompt, career)}</p>
-    <p class="inv-progress">已找到 ${found} / ${total} 份有關資料</p>
-    <div class="inv-grid">${cards}</div>
+    <p class="inv-progress">已找到 ${found} / ${total} ${t.unit}</p>
+    ${cards}
     ${hint}
-    ${opened.length ? `<ul class="inv-details">${opened.map((it) => `<li><strong>${annotate(it.label, career)}</strong>：${annotate(it.detail, career)}</li>`).join("")}</ul>` : ""}
+    ${opened.length ? `<ul class="inv-details">${opened.map(detail).join("")}</ul>` : ""}
+    ${tip}
   </section>`;
 }
 
@@ -802,7 +842,7 @@ function renderInterrupt(career: Career, s: GameState, itr: Interrupt, head: str
       <main class="screen play">
         ${head}
         <article class="card call done">
-          <p class="kicker">來電・${esc(itr.caller)}</p>
+          <p class="kicker">${itr.via === "visit" ? "有人找你" : "來電"}・${esc(itr.caller)}</p>
           <p class="muted">你選了：${esc(ch.label)}</p>
           <p class="outcome">${annotate(ch.outcome, career)}</p>
           <div class="deltas">${deltaHtml(ch.effects)}</div>
@@ -819,7 +859,7 @@ function renderInterrupt(career: Career, s: GameState, itr: Interrupt, head: str
     <main class="screen play">
       ${head}
       <article class="card call">
-        <p class="kicker"><span class="ring" aria-hidden="true"></span>來電・${esc(itr.caller)}</p>
+        <p class="kicker"><span class="ring" aria-hidden="true"></span>${itr.via === "visit" ? "有人找你" : "來電"}・${esc(itr.caller)}</p>
         <h2>${annotate(itr.title, career)}</h2>
         <p>${annotate(itr.body, career)}</p>
       </article>
@@ -933,6 +973,16 @@ function biggestGapText(career: Career, s: GameState): string {
   return `「${CATEGORY_LABELS[biggest.category]}」${dir} ${Math.abs(biggest.gap)} 個百分點`;
 }
 
+/** 從業者回饋：有紀錄時在對照畫面的來源區顯示一行，展開可看摘要 */
+function feedbackHtml(career: Career): string {
+  const list = career.practitionerFeedback ?? [];
+  if (list.length === 0) return "";
+  const dates = list.map((f) => f.date).sort();
+  return `<details class="src feedback"><summary>已參考從業者回饋（${esc(dates.join("、"))}）</summary>${list
+    .map((f) => `<p class="muted">${esc(f.date)}：${esc(f.summary)}</p>`)
+    .join("")}</details>`;
+}
+
 function renderCompare(career: Career, s: GameState): void {
   const { rows, biggest } = compareAllocation(career, s);
   const estimate = allocationIsEstimate(career);
@@ -959,6 +1009,7 @@ function renderCompare(career: Career, s: GameState): void {
         <p>${esc(career.categoryNotes?.[biggest.category] ?? "")}</p>
       </article>
       <details class="src"><summary>比例來源</summary>${sourcesHtml(career.allocationSources)}</details>
+      ${feedbackHtml(career)}
       <button class="primary" id="next">看結算</button>
     </main>`;
   root.querySelector("#next")!.addEventListener("click", () => setState(advance(career, s)));

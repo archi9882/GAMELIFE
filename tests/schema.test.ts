@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { careers } from "../content/index";
-import { validateCareer, type Career } from "../content/schema";
+import { LIMITS, validateCareer, type Career } from "../content/schema";
 import { hasScene, sceneLocations } from "../src/scene";
 
 describe("劇本格式驗證", () => {
@@ -204,6 +204,130 @@ describe("劇本格式驗證", () => {
       expect(withInv((inv) => (inv.items[0].label = "字".repeat(13))).some((e) => e.includes("label"))).toBe(true);
       expect(withInv((inv) => (inv.items[0].detail = "字".repeat(61))).some((e) => e.includes("detail"))).toBe(true);
       expect(withInv((inv) => (inv.items[1].id = inv.items[0].id)).some((e) => e.includes("id 重複"))).toBe(true);
+    });
+  });
+
+  describe("專業小遊戲（查資料的 kind）", () => {
+    const swe = careers.find((c) => c.id === "swe")!;
+    const errsFor = (eventId: string, mutate: (inv: NonNullable<Career["events"][number]["investigate"]>) => void) => {
+      const bad = structuredClone(swe) as Career;
+      mutate(bad.events.find((e) => e.id === eventId)!.investigate!);
+      return validateCareer(bad).filter((e) => e.includes("查資料"));
+    };
+
+    it("軟體工程師三個小遊戲各用一種 kind；已參考從業者回饋，不再標示待審查", () => {
+      const kinds = Object.fromEntries(swe.events.filter((e) => e.investigate?.kind).map((e) => [e.id, e.investigate!.kind]));
+      expect(kinds).toEqual({ "s-review": "review", "s-unittest": "test", "s-deepwork": "debug" });
+      expect(swe.practitionerFeedback?.[0]?.date).toBe("2026-10-22");
+      for (const id of Object.keys(kinds)) {
+        const inv = swe.events.find((e) => e.id === id)!.investigate!;
+        expect(inv.reviewPending).toBeUndefined();
+        expect(inv.tip).toBeTruthy();
+        expect(inv.items.every((it) => !!it.why)).toBe(true);
+      }
+    });
+
+    it("kind 必須是 info、review、debug、test 之一", () => {
+      expect(errsFor("s-review", (inv) => ((inv as { kind: string }).kind = "quiz")).some((e) => e.includes("kind 不合法"))).toBe(true);
+    });
+
+    it("review 的 label 是程式碼行，上限放寬到 codeLineMax；其他 kind 維持 itemLabelMax", () => {
+      expect(errsFor("s-review", (inv) => (inv.items[0].label = "x".repeat(LIMITS.codeLineMax)))).toEqual([]);
+      expect(errsFor("s-review", (inv) => (inv.items[0].label = "x".repeat(LIMITS.codeLineMax + 1))).some((e) => e.includes("label"))).toBe(true);
+      expect(errsFor("s-unittest", (inv) => (inv.items[0].label = "x".repeat(LIMITS.itemLabelMax + 1))).some((e) => e.includes("label"))).toBe(true);
+    });
+
+    it("why、tip 過長或空白會被擋下", () => {
+      expect(errsFor("s-review", (inv) => (inv.items[0].why = "字".repeat(LIMITS.whyMax + 1))).some((e) => e.includes("why"))).toBe(true);
+      expect(errsFor("s-review", (inv) => (inv.items[0].why = "")).some((e) => e.includes("why"))).toBe(true);
+      expect(errsFor("s-review", (inv) => (inv.tip = "字".repeat(LIMITS.tipMax + 1))).some((e) => e.includes("tip"))).toBe(true);
+    });
+
+    it("tag 只能用在 debug，且必須是三種標籤之一", () => {
+      expect(errsFor("s-deepwork", (inv) => ((inv.items[0] as { tag: string }).tag = "網路")).some((e) => e.includes("tag 不合法"))).toBe(true);
+      expect(errsFor("s-review", (inv) => (inv.items[0].tag = "程式碼")).some((e) => e.includes("只有 debug"))).toBe(true);
+    });
+
+    it("名詞比對涵蓋 why、tip 與打斷事件的文字", () => {
+      const withTerm = (mutate: (c: Career) => void) => {
+        const c = structuredClone(swe) as Career;
+        c.glossary!.push({ term: "冷門詞", meaning: "測試用" });
+        mutate(c);
+        return validateCareer(c).some((e) => e.includes("冷門詞"));
+      };
+      expect(withTerm(() => {})).toBe(true);
+      expect(withTerm((c) => (c.events.find((e) => e.id === "s-review")!.investigate!.items[0].why = "冷門詞"))).toBe(false);
+      expect(withTerm((c) => (c.events.find((e) => e.id === "s-review")!.investigate!.tip = "冷門詞"))).toBe(false);
+      expect(withTerm((c) => (c.interrupts!.find((i) => i.id === "i-s-printer")!.body = "冷門詞"))).toBe(false);
+    });
+
+    it("新名詞（單元測試、除錯、UTC、時區）都在詞彙表裡", () => {
+      const terms = swe.glossary!.map((g) => g.term);
+      for (const t of ["單元測試", "除錯", "UTC", "時區"]) expect(terms).toContain(t);
+    });
+
+    it("新名詞（ticket、Scrum、開發環境、正式環境、本機測試）都在詞彙表裡", () => {
+      const terms = swe.glossary!.map((g) => g.term);
+      for (const t of ["ticket", "Scrum", "開發環境", "正式環境", "本機測試", "事後檢討", "工單"]) expect(terms).toContain(t);
+    });
+
+    it("修印表機是 s-ci 期間的打斷事件", () => {
+      const it = swe.interrupts!.find((i) => i.id === "i-s-printer")!;
+      expect(it.during).toBe("s-ci");
+      expect(it.choices).toHaveLength(2);
+    });
+  });
+
+  describe("ticket 主線（v0.10）", () => {
+    const swe = careers.find((c) => c.id === "swe")!;
+    const fresh = () => structuredClone(swe) as Career;
+
+    it("事件上限 14，軟體工程師剛好 14 件；超過會被擋下", () => {
+      expect(LIMITS.eventsMax).toBe(14);
+      expect(swe.events).toHaveLength(14);
+      const c = fresh();
+      c.events.push({ ...structuredClone(c.events[c.events.length - 1]), id: "s-extra", group: undefined, expire: undefined, time: "18:00" });
+      expect(validateCareer(c).some((e) => e.includes("事件數需"))).toBe(true);
+    });
+
+    it("requiresAny：旗標必須由更早的選項設定，且至少 2 個", () => {
+      const c = fresh();
+      c.events.find((e) => e.id === "s-returned")!.requiresAny = ["rushed_dev", "nope"];
+      expect(validateCareer(c).some((e) => e.includes("requiresAny") && e.includes("nope"))).toBe(true);
+      const one = fresh();
+      one.events.find((e) => e.id === "s-returned")!.requiresAny = ["rushed_dev"];
+      expect(validateCareer(one).some((e) => e.includes("至少要 2 個旗標"))).toBe(true);
+    });
+
+    it("條件時限：每種條件事件組合都要做得完", () => {
+      const c = fresh();
+      c.deadlines!.evening = { base: 40, extra: { "s-bug-found": 14 } };
+      const errs = validateCareer(c);
+      expect(errs.some((e) => e.includes("太緊") && e.includes("s-bug-found有"))).toBe(true);
+      expect(errs.some((e) => e.includes("s-bug-found無"))).toBe(false);
+    });
+
+    it("條件時限：每種組合都要有壓力", () => {
+      const c = fresh();
+      c.deadlines!.evening = { base: 80, extra: { "s-bug-found": 15 } };
+      expect(validateCareer(c).some((e) => e.includes("太鬆") && e.includes("s-bug-found無"))).toBe(true);
+    });
+
+    it("條件時限：extra 只能指向同組的條件事件，且為正整數", () => {
+      const c = fresh();
+      c.deadlines!.evening = { base: 40, extra: { "s-bug-found": 15, "s-mentor": 5, "s-review": 5 } };
+      const errs = validateCareer(c);
+      expect(errs.some((e) => e.includes("s-mentor") && e.includes("不是條件事件"))).toBe(true);
+      expect(errs.some((e) => e.includes("s-review") && e.includes("不在這個 group"))).toBe(true);
+      const neg = fresh();
+      neg.deadlines!.evening = { base: 55, extra: { "s-bug-found": 0 } };
+      expect(validateCareer(neg).some((e) => e.includes("正整數"))).toBe(true);
+    });
+
+    it("時限仍可用單一數字", () => {
+      const c = fresh();
+      c.deadlines!.evening = 55;
+      expect(validateCareer(c)).toEqual([]);
     });
   });
 });

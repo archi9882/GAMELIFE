@@ -1,17 +1,38 @@
 {
   "id": "swe",
   "name": "軟體工程師",
-  "intro": "你是一家電商公司的後端工程師，團隊用兩週一個迭代（sprint）的方式開發。這週要上線新的結帳功能。",
+  "intro": "你是一家電商公司的後端工程師，團隊用 Scrum 開發，每兩週一個迭代（sprint）。今天你會領到一張 ticket，要在下班前上線。",
   "dayStart": "09:30",
   "dayEnd": "18:30",
   "locations": [
-    { "id": "desk", "name": "我的座位" },
-    { "id": "standup", "name": "站會區" },
-    { "id": "meeting", "name": "會議室" },
-    { "id": "pantry", "name": "茶水間" },
-    { "id": "newbie", "name": "新人座位" }
+    {
+      "id": "desk",
+      "name": "我的座位"
+    },
+    {
+      "id": "standup",
+      "name": "站會區"
+    },
+    {
+      "id": "meeting",
+      "name": "會議室"
+    },
+    {
+      "id": "pantry",
+      "name": "茶水間"
+    },
+    {
+      "id": "newbie",
+      "name": "新人座位"
+    }
   ],
-  "actualAllocation": { "core": 50, "communicate": 39, "admin": 5, "wait": 3, "learn": 3 },
+  "actualAllocation": {
+    "core": 50,
+    "communicate": 39,
+    "admin": 5,
+    "wait": 3,
+    "learn": 3
+  },
   "allocationSources": [
     {
       "type": "public_report",
@@ -23,36 +44,59 @@
   "categoryNotes": {
     "core": "在這份微軟調查裡，開發相關活動（寫程式、除錯、測試、需求、審查、文件）加起來約 48%，但單純寫程式只有 15%，除錯就占 14%。",
     "communicate": "會議占 15%、Email 占 10%，再加上被打斷和協助同事，溝通類約占一天的三分之一。軟體是團隊一起做的東西。",
-    "admin": "寫文件、填工單、整理事後檢討報告，這些也是工程師的工作。",
+    "admin": "寫文件、更新 ticket 狀態、整理事後檢討報告，這些也是工程師的工作。",
     "wait": "資料裡這一類是移動、規劃與環境架設（3%）；遊戲把等待 CI 放在這類是本專案近似。",
     "learn": "資料中學習只占約 3%，但技術更新快，工程師常需要自己抽時間學。"
   },
   "events": [
     {
       "id": "s-standup",
-      "time": "09:40",
+      "time": "09:30",
       "location": "standup",
       "category": "communicate",
       "title": "每日站會",
-      "body": "十五分鐘的站會，每人報告昨天做了什麼、今天要做什麼、卡在哪裡。你其實卡在一個沒頭緒的問題。",
+      "body": "5 分鐘的 Scrum 站會，每人說昨天做了什麼、今天要做什麼。會後 PM 指派 ticket：「訂單頁顯示預計配送時間，今天上線。」",
       "choices": [
         {
-          "label": "說明卡在哪裡，請人幫忙",
-          "effects": { "time": -10, "trust": 10, "energy": -5 },
-          "traits": { "social": 1 },
-          "outcome": "資深同事說會後幫你看，但站會延長了，大家晚一點才回到座位。",
-          "setFlags": ["asked_help"]
+          "label": "先問清楚需求再開工",
+          "effects": {
+            "time": -5,
+            "energy": -5,
+            "trust": 5
+          },
+          "traits": {
+            "social": 1,
+            "achieve_solve": 1
+          },
+          "outcome": "你問到配送遇假日要順延、深夜下單要算隔天。PM 很滿意，但你晚了一點才開始寫。"
         },
         {
-          "label": "說明進度，自己再試一小時",
-          "effects": { "time": 5, "trust": -5, "energy": -10 },
-          "traits": { "social": -1, "achieve_solve": 1 },
-          "outcome": "站會準時結束，你多出一點時間；但得一個人繼續跟這個問題搏鬥。"
+          "label": "直接開工，先求能動",
+          "effects": {
+            "time": 5,
+            "trust": -5,
+            "energy": -5
+          },
+          "traits": {
+            "pace": 1,
+            "achieve_make": 1
+          },
+          "outcome": "畫面很快就有東西了。至於假日、深夜這些情況，你打算之後再說。",
+          "setFlags": [
+            "rushed_dev"
+          ]
         }
       ],
-      "tags": ["意想不到", "會議"],
+      "tags": [
+        "意想不到",
+        "會議"
+      ],
       "sources": [
-        { "type": "fiction", "title": "虛構情境", "note": "對應敏捷開發中常見的每日站會。" }
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應 Scrum 的每日站會與 PM 開 ticket 的流程；依從業者描述（2026-10-22）。"
+        }
       ]
     },
     {
@@ -61,36 +105,87 @@
       "location": "desk",
       "category": "core",
       "title": "線上告警",
-      "body": "監控系統跳出警示：部分使用者付款失敗。今天剛好輪到你值班，訊息群組開始有人在問。",
+      "body": "監控系統跳出警示：部分使用者付款失敗。付款服務不是你寫的，你不太熟，但今天剛好輪到你值班。",
       "investigate": {
         "prompt": "找出付款失敗從什麼時候開始、跟什麼有關",
         "items": [
-          { "id": "log", "label": "錯誤紀錄", "detail": "10:02 起大量出現「付款服務逾時」，之前幾乎沒有。", "relevant": true },
-          { "id": "deploy", "label": "今天的部署紀錄", "detail": "10:00 上線了一個新版本，內容包含付款流程的修改。", "relevant": true },
-          { "id": "chart", "label": "付款服務監控圖", "detail": "回應時間在 10:00 之後突然拉高，失敗率同步上升。", "relevant": true },
-          { "id": "wifi", "label": "辦公室 Wi-Fi 狀態", "detail": "今天辦公室網路正常，沒有斷線紀錄。", "relevant": false },
-          { "id": "spec", "label": "上週的需求文件", "detail": "上週討論的是首頁改版，和付款無關。", "relevant": false },
-          { "id": "calendar", "label": "團隊行事曆", "detail": "下午兩點有例行站會，沒有其他安排。", "relevant": false }
+          {
+            "id": "log",
+            "label": "錯誤紀錄",
+            "detail": "10:02 起大量出現「付款服務逾時」，之前幾乎沒有。",
+            "relevant": true
+          },
+          {
+            "id": "deploy",
+            "label": "今天的部署紀錄",
+            "detail": "10:00 上線了一個新版本，內容包含付款流程的修改。",
+            "relevant": true
+          },
+          {
+            "id": "chart",
+            "label": "付款服務監控圖",
+            "detail": "回應時間在 10:00 之後突然拉高，失敗率同步上升。",
+            "relevant": true
+          },
+          {
+            "id": "wifi",
+            "label": "辦公室 Wi-Fi 狀態",
+            "detail": "今天辦公室網路正常，沒有斷線紀錄。",
+            "relevant": false
+          },
+          {
+            "id": "spec",
+            "label": "上週的需求文件",
+            "detail": "上週討論的是首頁改版，和付款無關。",
+            "relevant": false
+          },
+          {
+            "id": "calendar",
+            "label": "團隊行事曆",
+            "detail": "下午沒有例行會議，其他時間都空著。",
+            "relevant": false
+          }
         ]
       },
       "choices": [
         {
           "label": "立刻停下手邊工作處理",
-          "effects": { "energy": -15, "time": -15, "trust": 10 },
-          "traits": { "pace": 2, "achieve_solve": 1 },
+          "effects": {
+            "energy": -10,
+            "time": -10,
+            "trust": 10
+          },
+          "traits": {
+            "pace": 2,
+            "achieve_solve": 1
+          },
           "outcome": "四十分鐘後你找到原因並修好。腎上腺素退去，原本的進度全被打斷。",
-          "setFlags": ["hotfix"]
+          "setFlags": [
+            "hotfix"
+          ]
         },
         {
           "label": "先回滾到上一版",
-          "effects": { "time": -5, "trust": -5, "energy": -5 },
-          "traits": { "pace": 1, "achieve_solve": 1 },
+          "effects": {
+            "trust": -5,
+            "energy": -5
+          },
+          "traits": {
+            "pace": 1,
+            "achieve_solve": 1
+          },
           "outcome": "錯誤很快停止，使用者可以付款了；但你還沒找到原因，還得查。"
         }
       ],
-      "tags": ["突發"],
+      "tags": [
+        "突發"
+      ],
       "sources": [
-        { "type": "fiction", "title": "虛構情境", "note": "對應線上服務的值班（on-call）與事故處理工作。" }
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應線上服務的值班（on-call），以及處理不熟悉的 issue；依從業者描述（2026-10-22）。"
+        }
       ]
     },
     {
@@ -110,20 +205,39 @@
       "choices": [
         {
           "label": "仔細寫，附上改善方案",
-          "effects": { "time": -15, "energy": -5, "trust": 10 },
-          "traits": { "achieve_solve": 1, "social": -1 },
+          "effects": {
+            "time": -15,
+            "energy": -5,
+            "trust": 10
+          },
+          "traits": {
+            "achieve_solve": 1,
+            "social": -1
+          },
           "outcome": "報告寫得很完整，團隊決定採用你的預防方案，但功能開發又往後延。"
         },
         {
           "label": "簡單交代重點就好",
-          "effects": { "trust": -10, "time": -5 },
-          "traits": { "pace": 1 },
+          "effects": {
+            "trust": -10,
+            "time": -5
+          },
+          "traits": {
+            "pace": 1
+          },
           "outcome": "很快交差，但主管在週會上問了好幾個你沒寫清楚的細節。"
         }
       ],
-      "tags": ["意想不到", "文件"],
+      "tags": [
+        "意想不到",
+        "文件"
+      ],
       "sources": [
-        { "type": "fiction", "title": "虛構情境", "note": "對應業界常見的事故檢討（postmortem）文件。" }
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應業界常見的事故檢討（postmortem）文件。"
+        }
       ]
     },
     {
@@ -140,34 +254,111 @@
       "category": "core",
       "title": "一個很大的 PR",
       "body": "同事送來一個改了 40 個檔案的 pull request 請你 review，他希望今天合併，好趕上這次上線。",
+      "investigate": {
+        "kind": "review",
+        "prompt": "看這段改動，點出可能有問題的行",
+        "items": [
+          {
+            "id": "l1",
+            "label": "function calcTotal(cart) {  // 計算購物車總價",
+            "detail": "宣告函式和參數。",
+            "relevant": false,
+            "why": "只是函式的名稱和要傳進來的購物車，沒有問題。"
+          },
+          {
+            "id": "l2",
+            "label": "  let total = 0  // 總價從 0 開始",
+            "detail": "先把總價設成 0。",
+            "relevant": false,
+            "why": "總價從 0 開始累加，正常。"
+          },
+          {
+            "id": "l3",
+            "label": "  for (let i = 1; i < cart.length; i++)  // 從第 1 件開始加總",
+            "detail": "迴圈從 i = 1 開始。",
+            "relevant": true,
+            "why": "清單從第 0 個開始數，從 1 開始會漏掉第一件商品。"
+          },
+          {
+            "id": "l4",
+            "label": "    total += cart[i].price * cart[i].qty  // 加上單價乘以數量",
+            "detail": "每件商品的單價乘以數量，加進總價。",
+            "relevant": false,
+            "why": "單價乘以數量再加總，算法正確。"
+          },
+          {
+            "id": "l5",
+            "label": "  if (coupon = \"VIP\") total = total * 0.9  // VIP 打九折",
+            "detail": "判斷折扣碼是不是 VIP。",
+            "relevant": true,
+            "why": "「=」是把值放進去，不是比較，所以每個人都會拿到 VIP 折扣。"
+          },
+          {
+            "id": "l6",
+            "label": "  return total  // 回傳總價",
+            "detail": "把算好的總價交回去。",
+            "relevant": false,
+            "why": "回傳結果，正常。"
+          }
+        ],
+        "tip": "review 時通常一次只看一小段改動，改動太大就容易漏看，所以團隊常要求拆成小 PR。"
+      },
       "choices": [
         {
           "label": "逐行看並留詳細意見",
-          "effects": { "time": -20, "energy": -10, "trust": 10 },
-          "traits": { "social": 1, "achieve_solve": 1 },
+          "effects": {
+            "time": -20,
+            "energy": -10,
+            "trust": 10
+          },
+          "traits": {
+            "social": 1,
+            "achieve_solve": 1
+          },
           "outcome": "你找到兩個潛在的錯誤，但自己的工作完全沒動。"
         },
         {
           "label": "請他拆成小 PR 再送",
-          "effects": { "trust": -10, "time": -5 },
-          "traits": { "pace": -1 },
+          "effects": {
+            "trust": -10,
+            "time": -5
+          },
+          "traits": {
+            "pace": -1
+          },
           "outcome": "長期來看比較好維護，但他今天趕不上，臉色不太好看。"
         },
         {
           "label": "只看重點檔案就核准",
-          "effects": { "trust": 5, "energy": -5, "time": 5 },
-          "traits": { "pace": 1, "social": 1 },
+          "effects": {
+            "trust": 5,
+            "energy": -5,
+            "time": 5
+          },
+          "traits": {
+            "pace": 1,
+            "social": 1
+          },
           "outcome": "同事很感謝你，也趕上了上線；但沒看的檔案裡可能有漏掉的問題。",
-          "setFlags": ["rubber_stamp"]
+          "setFlags": [
+            "rubber_stamp"
+          ]
         }
       ],
-      "tags": ["人際", "協作"],
+      "tags": [
+        "人際",
+        "協作"
+      ],
       "sources": [
-        { "type": "fiction", "title": "虛構情境", "note": "對應程式碼審查（code review）的協作流程。" }
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應程式碼審查（code review）的協作流程；review 別人的 PR 也是日常工作（依從業者描述（2026-10-22））。"
+        }
       ]
     },
     {
-      "id": "s-lunch",
+      "id": "s-techshare",
       "time": "12:40",
       "location": "pantry",
       "group": "noon",
@@ -175,28 +366,44 @@
         "effects": {
           "energy": -10
         },
-        "outcome": "午餐被會議吃掉了，你只匆匆咬了幾口麵包。"
+        "outcome": "分享會和午餐都被需求會議吃掉了，你只匆匆咬了幾口麵包。"
       },
       "category": "learn",
-      "title": "午餐技術分享",
-      "body": "隔壁團隊在午餐時間分享他們怎麼導入新的測試工具。你也想趁午休安靜地吃飯放空。",
+      "title": "技術分享會",
+      "body": "公司每月有幾次技術分享會，講者有時是內部工程師，今天是外部講師，談大型電商怎麼做監控。剛好排在午餐時間。",
       "choices": [
         {
           "label": "邊吃邊聽分享",
-          "effects": { "energy": -10 },
-          "traits": { "social": 1, "achieve_solve": 1 },
-          "outcome": "學到一個能用在結帳功能的技巧，但下午有點累。"
+          "effects": {
+            "energy": -10
+          },
+          "traits": {
+            "social": 1,
+            "achieve_solve": 1
+          },
+          "outcome": "講師的監控做法正好能用在早上的告警，但午休沒休息到，下午有點累。"
         },
         {
           "label": "自己找地方休息",
-          "effects": { "energy": 10, "trust": -5 },
-          "traits": { "social": -1 },
-          "outcome": "你恢復了精神。之後同事提到那個工具，你接不上話。"
+          "effects": {
+            "energy": 10,
+            "trust": -5
+          },
+          "traits": {
+            "social": -1
+          },
+          "outcome": "你恢復了精神。之後同事討論講師提到的工具，你接不上話。"
         }
       ],
-      "tags": ["學習"],
+      "tags": [
+        "學習"
+      ],
       "sources": [
-        { "type": "fiction", "title": "虛構情境", "note": "對應工程團隊的知識分享文化。" }
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應工程團隊定期的技術分享會；依從業者描述（2026-10-22）。"
+        }
       ]
     },
     {
@@ -208,87 +415,400 @@
         "effects": {
           "trust": -15
         },
-        "outcome": "產品經理沒等到你的回覆，自己向老闆答應了分期付款。"
+        "outcome": "PM 沒等到你的回覆，自己向老闆答應了指定到貨日。"
       },
       "category": "communicate",
       "title": "需求改了",
-      "body": "產品經理說：老闆希望結帳頁加上分期付款選項，最好這次一起上線。距離上線只剩兩天。",
+      "body": "PM 說：老闆希望配送時間旁邊再加一個「指定到貨日」，最好今天一起上線。這張 ticket 的期限就是今天。",
       "choices": [
         {
-          "label": "評估後說明需要延期",
-          "effects": { "time": -20, "trust": -5, "energy": -5 },
-          "traits": { "social": 1, "achieve_solve": 1 },
-          "outcome": "你列出影響範圍，最後決定下次迭代再做。會議開了快一小時。"
+          "label": "評估後說明要另開 ticket",
+          "effects": {
+            "time": -20,
+            "trust": -5,
+            "energy": -5
+          },
+          "traits": {
+            "social": 1,
+            "achieve_solve": 1
+          },
+          "outcome": "你列出影響範圍，最後決定開一張新 ticket 下次迭代再做。會議開了快一小時。"
         },
         {
           "label": "答應，加班趕出來",
-          "effects": { "energy": -20, "trust": 10 },
-          "traits": { "pace": 1, "achieve_make": 1 },
+          "effects": {
+            "energy": -20,
+            "trust": 10
+          },
+          "traits": {
+            "pace": 1,
+            "achieve_make": 1
+          },
           "outcome": "大家都鬆了一口氣，只有你知道今晚和明晚都回不了家。",
-          "setFlags": ["overtime"]
+          "setFlags": [
+            "overtime"
+          ]
         }
       ],
-      "tags": ["意想不到", "會議"],
+      "tags": [
+        "意想不到",
+        "會議"
+      ],
       "sources": [
-        { "type": "fiction", "title": "虛構情境", "note": "對應迭代開發中的需求變更與範圍協商。" }
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應迭代開發中的需求變更與範圍協商。"
+        }
+      ]
+    },
+    {
+      "id": "s-unittest",
+      "time": "13:30",
+      "location": "desk",
+      "category": "core",
+      "title": "寫單元測試",
+      "body": "午餐後沒有例行會議，你回到早上的 ticket。配送時間的計算寫好了，送 review 之前要先寫單元測試。",
+      "investigate": {
+        "kind": "test",
+        "prompt": "計算預計配送時間的函式，要測哪些情況？",
+        "items": [
+          {
+            "id": "midnight",
+            "label": "深夜 11 點半下單",
+            "detail": "跨過午夜才出貨，配送日要多算一天。",
+            "relevant": true,
+            "why": "跨過午夜時日期要進位，這類邊界情況最常出錯。"
+          },
+          {
+            "id": "holiday",
+            "label": "週六下單",
+            "detail": "物流週日不出貨，配送日要順延。",
+            "relevant": true,
+            "why": "業務規則裡的例外，需求寫了就要有測試保護。"
+          },
+          {
+            "id": "noaddr",
+            "label": "訂單還沒填地址",
+            "detail": "沒有地址時應顯示「填寫地址後計算」。",
+            "relevant": true,
+            "why": "異常輸入要有合理處理，不能讓整個訂單頁打不開。"
+          },
+          {
+            "id": "color",
+            "label": "文字顏色好不好看",
+            "detail": "配送時間的文字用什麼顏色。",
+            "relevant": false,
+            "why": "這是設計審查，不是單元測試。"
+          },
+          {
+            "id": "room",
+            "label": "測試在哪間會議室跑",
+            "detail": "測試要在哪間會議室執行。",
+            "relevant": false,
+            "why": "測試在電腦上自動執行，和會議室無關。"
+          }
+        ],
+        "tip": "單元測試是用小例子自動檢查一個函式。正常情況之外，邊界和例外情況最容易藏錯。"
+      },
+      "choices": [
+        {
+          "label": "正常、邊界、例外都測",
+          "effects": {
+            "time": -10,
+            "energy": -5,
+            "trust": 5
+          },
+          "traits": {
+            "achieve_solve": 1,
+            "pace": -1
+          },
+          "outcome": "測試一寫就抓到深夜下單算錯一天。修好了，但比預計多花了快一小時。"
+        },
+        {
+          "label": "只測正常情況，趕進度",
+          "effects": {
+            "trust": -5
+          },
+          "traits": {
+            "pace": 1
+          },
+          "outcome": "測試很快全部通過。你心裡知道，有些情況其實沒測到。",
+          "setFlags": [
+            "weak_tests"
+          ]
+        }
+      ],
+      "tags": [
+        "測試"
+      ],
+      "sources": [
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應開發流程中的單元測試；開發要寫單元測試、適用不同情境（依從業者描述（2026-10-22））。"
+        }
       ]
     },
     {
       "id": "s-deepwork",
-      "time": "14:40",
+      "time": "14:10",
       "location": "desk",
       "category": "core",
-      "title": "終於可以寫程式",
-      "body": "下午有一段沒有會議的時間。你打開編輯器，但測試一直失敗，錯誤訊息很不清楚。",
+      "title": "本機測試失敗",
+      "body": "送主管 review 前，你在自己電腦上做本機測試。訂單頁顯示的預計配送時間，比預期早了好幾個小時。",
+      "investigate": {
+        "kind": "debug",
+        "prompt": "本機測試失敗了，找出原因的線索",
+        "items": [
+          {
+            "id": "msg",
+            "tag": "錯誤訊息",
+            "label": "測試失敗訊息",
+            "detail": "預計配送：expected \"10/24 14:00\", got \"10/24 06:00\"",
+            "relevant": true,
+            "why": "預期和實際剛好差 8 小時。差得這麼整齊，通常不是算錯，而是時間基準不同。"
+          },
+          {
+            "id": "store",
+            "tag": "程式碼",
+            "label": "配送時間怎麼存",
+            "detail": "order.eta = calcEta(order)  // 配送時間用世界標準時間（UTC）存",
+            "relevant": true,
+            "why": "存成 UTC 是常見做法，全世界用同一個基準；重點是顯示時有沒有轉回來。"
+          },
+          {
+            "id": "show",
+            "tag": "程式碼",
+            "label": "畫面怎麼顯示時間",
+            "detail": "label.text = format(order.eta)  // 把配送時間顯示在訂單頁",
+            "relevant": true,
+            "why": "顯示前沒有轉成台灣時間（UTC+8），也就是沒做時區轉換，畫面就少了 8 小時。"
+          },
+          {
+            "id": "deps",
+            "tag": "環境",
+            "label": "套件版本",
+            "detail": "套件版本和昨天一樣，沒有升級。",
+            "relevant": false,
+            "why": "環境沒變，所以不是套件更新造成的。"
+          },
+          {
+            "id": "others",
+            "tag": "環境",
+            "label": "其他測試結果",
+            "detail": "這台電腦上的其他測試都通過。",
+            "relevant": false,
+            "why": "其他測試都正常，表示電腦和測試工具本身沒問題。"
+          },
+          {
+            "id": "color",
+            "tag": "程式碼",
+            "label": "文字顏色設定",
+            "detail": "label.color = \"green\"  // 配送時間用綠色",
+            "relevant": false,
+            "why": "顏色和時間計算無關，不會讓時間差 8 小時。"
+          }
+        ],
+        "tip": "除錯常是先從「差了多少」看出模式，例如剛好 8 小時，就提示可能是時區問題。"
+      },
       "choices": [
         {
           "label": "關掉通知專心除錯",
-          "effects": { "energy": -15, "time": -15 },
-          "traits": { "social": -1, "achieve_solve": 2 },
-          "outcome": "一個半小時後你找到原因：一個時區轉換的錯誤。修好的瞬間超有成就感。"
+          "effects": {
+            "energy": -10,
+            "time": -10
+          },
+          "traits": {
+            "social": -1,
+            "achieve_solve": 2
+          },
+          "outcome": "一個半小時後你找到原因：顯示前少了時區轉換。修好的瞬間超有成就感。"
         },
         {
           "label": "請同事一起看",
-          "effects": { "time": -5, "energy": -5, "trust": -5 },
-          "traits": { "social": 1, "achieve_solve": 1 },
+          "effects": {
+            "energy": -5,
+            "trust": -5
+          },
+          "traits": {
+            "social": 1,
+            "achieve_solve": 1
+          },
           "outcome": "他十分鐘就看出問題，你省下時間；但欠了他一個人情，也沒真正搞懂。"
         }
       ],
-      "tags": ["成就感", "專注"],
+      "tags": [
+        "成就感",
+        "專注"
+      ],
       "sources": [
-        { "type": "fiction", "title": "虛構情境", "note": "對應開發與除錯工作；Meyer 等人（2021）提到專注時間與打斷對開發者的影響。" }
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應開發與除錯工作；本機測試完才給主管 review（依從業者描述（2026-10-22））。Meyer 等人（2021）提到專注時間與打斷對開發者的影響。"
+        }
+      ]
+    },
+    {
+      "id": "s-returned",
+      "time": "15:00",
+      "location": "desk",
+      "category": "core",
+      "requiresAny": [
+        "rushed_dev",
+        "weak_tests"
+      ],
+      "title": "主管 review 退回",
+      "body": "主管退回你的 PR，留言寫著：深夜下單的日期算錯（邏輯錯誤）、每筆訂單都重查資料庫（效能不佳），測試也不足。",
+      "choices": [
+        {
+          "label": "把計算邏輯重寫",
+          "effects": {
+            "time": -10,
+            "energy": -5,
+            "trust": 5
+          },
+          "traits": {
+            "achieve_solve": 1,
+            "achieve_make": 1
+          },
+          "outcome": "你改成先查一次再算，順便補齊測試。重送後主管核准，但下午幾乎都花在這裡。"
+        },
+        {
+          "label": "先補測試，修最急的錯",
+          "effects": {
+            "time": -5,
+            "energy": -5,
+            "trust": -5
+          },
+          "traits": {
+            "pace": 1
+          },
+          "outcome": "補上深夜和假日的測試，修好日期錯誤；效能問題另開 ticket，主管勉強核准。"
+        }
+      ],
+      "tags": [
+        "意想不到",
+        "協作"
+      ],
+      "sources": [
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應主管 code review：邏輯錯誤、效能不佳或單元測試不佳，程式會被退回重寫（依從業者描述（2026-10-22））。"
+        }
       ]
     },
     {
       "id": "s-ci",
-      "time": "15:50",
+      "time": "15:40",
       "location": "desk",
       "category": "wait",
       "title": "等待 CI",
-      "body": "你推上程式碼，自動化測試要跑 25 分鐘。另一個團隊的 API 也還沒回覆你上午的問題。",
+      "body": "主管核准後，你把程式碼合併進主線，自動化測試要跑 25 分鐘。另一個團隊的 API 也還沒回覆你上午的問題。",
       "choices": [
         {
           "label": "趁空檔回訊息、看文件",
-          "effects": { "energy": -5, "time": -5 },
-          "traits": { "social": 1 },
+          "effects": {
+            "energy": -5,
+            "time": -5
+          },
+          "traits": {
+            "social": 1
+          },
           "outcome": "零碎的事處理掉了，但一直切換讓你很難再進入專注狀態。"
         },
         {
           "label": "直接去找那個團隊",
-          "effects": { "time": -10, "trust": 5, "energy": -5 },
-          "traits": { "social": 1, "pace": 1 },
+          "effects": {
+            "time": -10,
+            "trust": 5,
+            "energy": -5
+          },
+          "traits": {
+            "social": 1,
+            "pace": 1
+          },
           "outcome": "當面問五分鐘就解決了，但你打斷了他們的工作。"
         },
         {
           "label": "起來走走休息",
-          "effects": { "energy": 10, "time": -10 },
-          "traits": { "social": -1, "pace": -1 },
+          "effects": {
+            "energy": 10,
+            "time": -10
+          },
+          "traits": {
+            "social": -1,
+            "pace": -1
+          },
           "outcome": "回來時精神好多了，但那個 API 問題還是沒有答案。"
         }
       ],
-      "tags": ["等待"],
+      "tags": [
+        "等待"
+      ],
       "sources": [
-        { "type": "fiction", "title": "虛構情境", "note": "對應持續整合（CI）流程與跨團隊協作。" }
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應持續整合（CI）流程與跨團隊協作。"
+        }
+      ]
+    },
+    {
+      "id": "s-deploy",
+      "time": "16:30",
+      "location": "desk",
+      "group": "evening",
+      "expire": {
+        "effects": {
+          "trust": -15
+        },
+        "outcome": "今天沒部署成，ticket 過了期限，PM 隔天一早在站會上問起。"
+      },
+      "category": "core",
+      "title": "部署與上線",
+      "body": "CI 通過了。你把 ticket 部署到開發環境再測一次，接著要決定：今天就部署到正式環境，還是明早再上？",
+      "choices": [
+        {
+          "label": "今天部署到正式環境",
+          "effects": {
+            "time": -5,
+            "energy": -10,
+            "trust": 10
+          },
+          "traits": {
+            "achieve_make": 2,
+            "pace": 1
+          },
+          "outcome": "你盯著監控看了二十分鐘，訂單頁順利顯示配送時間。PM 在 ticket 上留了一句謝謝。",
+          "setFlags": [
+            "shipped"
+          ]
+        },
+        {
+          "label": "明早再上正式環境",
+          "effects": {
+            "trust": -10,
+            "energy": 5
+          },
+          "traits": {
+            "pace": -1
+          },
+          "outcome": "多觀察一晚比較安心，但 ticket 的期限是今天，PM 得去向老闆解釋。"
+        }
+      ],
+      "tags": [
+        "成就感",
+        "上線"
+      ],
+      "sources": [
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應部署流程：部署開發環境、再測試、部署正式環境，都要在 ticket 期限內完成（依從業者描述（2026-10-22））。"
+        }
       ]
     },
     {
@@ -304,25 +824,44 @@
       },
       "category": "core",
       "title": "測試環境出錯",
-      "requires": ["rubber_stamp"],
-      "body": "上午你核准的那個 PR 合併後，測試環境的訂單頁打不開了。同事正在開會聯絡不到。",
+      "requires": [
+        "rubber_stamp"
+      ],
+      "body": "上午快速核准的 PR 合併後，測試環境的訂單頁打不開了，寫 PR 的同事在開會聯絡不到。",
       "choices": [
         {
           "label": "自己追查並修正",
-          "effects": { "energy": -15, "time": -15 },
-          "traits": { "achieve_solve": 1, "pace": 1 },
+          "effects": {
+            "energy": -15,
+            "time": -15
+          },
+          "traits": {
+            "achieve_solve": 1,
+            "pace": 1
+          },
           "outcome": "你修好了，順手在 PR 補了一則說明；但花掉不少精力。"
         },
         {
           "label": "先撤回那次合併",
-          "effects": { "trust": -5, "time": -5 },
-          "traits": { "pace": 1 },
+          "effects": {
+            "trust": -5,
+            "time": -5
+          },
+          "traits": {
+            "pace": 1
+          },
           "outcome": "環境很快恢復，你也省下精力；同事散會後看到，有點尷尬地來找你討論。"
         }
       ],
-      "tags": ["突發"],
+      "tags": [
+        "突發"
+      ],
       "sources": [
-        { "type": "fiction", "title": "虛構情境", "note": "對應程式碼審查與版本控制的實務。" }
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應程式碼審查與版本控制的實務。"
+        }
       ]
     },
     {
@@ -342,20 +881,39 @@
       "choices": [
         {
           "label": "拉他一起從頭講一遍",
-          "effects": { "time": -15, "energy": -5, "trust": 15 },
-          "traits": { "social": 1, "achieve_people": 2 },
+          "effects": {
+            "time": -15,
+            "energy": -5,
+            "trust": 15
+          },
+          "traits": {
+            "social": 1,
+            "achieve_people": 2
+          },
           "outcome": "講完他自己成功部署了一次，興奮地跟你道謝。你的進度又晚了一點。"
         },
         {
           "label": "回他文件連結，請他卡住再問",
-          "effects": { "trust": -5, "time": -5 },
-          "traits": { "social": -1 },
+          "effects": {
+            "trust": -5,
+            "time": -5
+          },
+          "traits": {
+            "social": -1
+          },
           "outcome": "你很快回到工作；他看完還有兩處不懂，隔天早上才問。"
         }
       ],
-      "tags": ["成就感", "人際"],
+      "tags": [
+        "成就感",
+        "人際"
+      ],
       "sources": [
-        { "type": "fiction", "title": "虛構情境", "note": "對應工程團隊的新人指導（onboarding）。" }
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應工程團隊的新人指導（onboarding）。"
+        }
       ]
     },
     {
@@ -370,34 +928,83 @@
         "outcome": "文件沒補，前端同事晚上傳訊息問你參數的意思。"
       },
       "category": "admin",
-      "title": "下班前的工單",
-      "body": "專案管理系統提醒你：更新今天的工單狀態，並補上結帳功能的 API 文件。",
+      "title": "更新 ticket 狀態",
+      "body": "下班前，專案管理系統提醒你：更新 ticket（工單）的狀態，並補上配送時間 API 的文件。",
       "choices": [
         {
           "label": "把文件寫完整",
-          "effects": { "time": -15, "energy": -5 },
-          "traits": { "achieve_make": 1, "social": -1 },
+          "effects": {
+            "time": -15,
+            "energy": -5
+          },
+          "traits": {
+            "achieve_make": 1,
+            "social": -1
+          },
           "outcome": "之後接手的人會很感謝你，但你又晚了半小時離開。"
         },
         {
           "label": "只更新狀態，文件明天寫",
-          "effects": { "trust": -5, "energy": 5 },
-          "traits": { "pace": 1 },
+          "effects": {
+            "trust": -5,
+            "energy": 5
+          },
+          "traits": {
+            "pace": 1
+          },
           "outcome": "準時下班。前端同事晚上傳訊息問你 API 參數的意思。"
         }
       ],
-      "tags": ["意想不到", "文件"],
+      "tags": [
+        "意想不到",
+        "文件"
+      ],
       "sources": [
-        { "type": "fiction", "title": "虛構情境", "note": "對應專案管理與技術文件撰寫。" }
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應專案管理與技術文件撰寫。"
+        }
       ]
     }
   ],
   "statusBadges": [
-    { "label": "加班趕工中", "tone": "alert", "flags": ["overtime"] },
-    { "label": "事故處理後", "tone": "info", "flags": ["hotfix"] },
-    { "label": "迭代進行中", "tone": "ok" }
+    {
+      "label": "ticket 已上線",
+      "tone": "ok",
+      "flags": [
+        "shipped"
+      ]
+    },
+    {
+      "label": "加班趕工中",
+      "tone": "alert",
+      "flags": [
+        "overtime"
+      ]
+    },
+    {
+      "label": "事故處理後",
+      "tone": "info",
+      "flags": [
+        "hotfix"
+      ]
+    },
+    {
+      "label": "ticket 進行中",
+      "tone": "info"
+    }
   ],
-  "deadlines": {"late-morning": 30, "noon": 30, "evening": 50},
+  "deadlines": {
+    "late-morning": 35,
+    "noon": 30,
+    "evening": {
+      "base": 40,
+      "extra": {
+        "s-bug-found": 15
+      }
+    }
+  },
   "interrupts": [
     {
       "id": "i-s-support",
@@ -447,12 +1054,12 @@
       "during": "s-deepwork",
       "caller": "產品經理・語音",
       "title": "五分鐘就好",
-      "body": "產品經理傳來語音邀請：「你有五分鐘嗎？老闆想看新結帳頁的畫面。」你剛進入專注狀態。",
+      "body": "PM 傳來語音邀請：「你有五分鐘嗎？老闆想先看訂單頁的配送時間。」你剛進入專注狀態。",
       "choices": [
         {
           "label": "接起來，邊說邊給他看",
           "effects": {
-            "time": -10,
+            "time": -5,
             "energy": -10,
             "trust": 10
           },
@@ -484,27 +1091,152 @@
           "note": "對應開發者常被臨時需求打斷專注時間（Meyer 等 2021 提到打斷在開發期特別不利）。"
         }
       ]
+    },
+    {
+      "id": "i-s-printer",
+      "during": "s-ci",
+      "caller": "行政同事・座位旁",
+      "via": "visit",
+      "title": "印表機又卡紙",
+      "body": "行政同事走到你的座位旁：「你是工程師吧？印表機一直卡紙，可以幫看一下嗎？」",
+      "choices": [
+        {
+          "label": "幫忙看看",
+          "effects": {
+            "time": -5,
+            "trust": 10
+          },
+          "traits": {
+            "social": 1
+          },
+          "outcome": "原來是紙放反了。行政很感謝你，但 CI 早就跑完了。"
+        },
+        {
+          "label": "請他找 IT 報修",
+          "effects": {
+            "trust": -5
+          },
+          "traits": {
+            "social": -1
+          },
+          "outcome": "你回到螢幕前，他走去報修，背影有點落寞。"
+        }
+      ],
+      "tags": [
+        "意想不到",
+        "人際"
+      ],
+      "sources": [
+        {
+          "type": "fiction",
+          "title": "虛構情境",
+          "note": "對應常見現象：別人以為寫程式的人什麼電腦問題都會修。"
+        }
+      ]
     }
   ],
   "glossary": [
-    { "term": "站會", "meaning": "團隊每天花十幾分鐘站著開的短會，輪流報告進度和遇到的困難。" },
-    { "term": "迭代", "meaning": "把開發切成固定長度的週期（常見一到兩週），每個週期交出一小批功能。" },
-    { "term": "上線", "meaning": "把寫好的功能或修正，正式放到使用者實際會用到的系統上。" },
-    { "term": "值班", "meaning": "輪流負責處理系統的突發狀況，有警報時要立刻回應。" },
-    { "term": "告警", "meaning": "監控系統偵測到異常時，自動發出的通知。" },
-    { "term": "回滾", "meaning": "把系統退回上一個穩定的版本，常用來快速止血。" },
-    { "term": "PR", "meaning": "Pull Request 的縮寫：把程式修改送出，請同事檢查後合併進主要程式碼。" },
-    { "term": "review", "meaning": "同事互相檢查程式碼，找出錯誤並提供修改建議。" },
-    { "term": "CI", "meaning": "持續整合：每次上傳程式碼，系統就自動執行一輪測試。" },
-    { "term": "事後檢討", "meaning": "事故處理完後，整理發生經過、原因和預防做法的文件。" },
-    { "term": "工單", "meaning": "在專案管理系統裡，記錄和追蹤一項工作的單子。" },
-    { "term": "API", "meaning": "讓不同程式互相溝通的介面，規定要怎麼請求、會得到什麼資料。" },
-    { "term": "測試環境", "meaning": "與正式系統分開、專門拿來試驗新功能的環境。" },
-    { "term": "部署", "meaning": "把程式放到伺服器上，讓它能實際運作。" }
+    {
+      "term": "站會",
+      "meaning": "團隊每天開的短會（常見 5～15 分鐘），輪流說進度和卡住的地方。"
+    },
+    {
+      "term": "Scrum",
+      "meaning": "一種敏捷開發方法：把工作切成固定長度的迭代，每天開站會同步進度。"
+    },
+    {
+      "term": "ticket",
+      "meaning": "一張記錄工作內容、負責人與期限的單子，由 PM 開立、工程師照著開發。中文也叫工單。"
+    },
+    {
+      "term": "迭代",
+      "meaning": "把開發切成固定長度的週期（常見一到兩週），每個週期交出一小批功能。"
+    },
+    {
+      "term": "上線",
+      "meaning": "把寫好的功能或修正，正式放到使用者實際會用到的系統上。"
+    },
+    {
+      "term": "值班",
+      "meaning": "輪流負責處理系統的突發狀況，有警報時要立刻回應。"
+    },
+    {
+      "term": "告警",
+      "meaning": "監控系統偵測到異常時，自動發出的通知。"
+    },
+    {
+      "term": "回滾",
+      "meaning": "把系統退回上一個穩定的版本，常用來快速止血。"
+    },
+    {
+      "term": "PR",
+      "meaning": "Pull Request 的縮寫：把程式修改送出，請同事檢查後合併進主要程式碼。"
+    },
+    {
+      "term": "review",
+      "meaning": "同事或主管檢查程式碼，找出錯誤並提供修改建議；沒通過會被退回。"
+    },
+    {
+      "term": "CI",
+      "meaning": "持續整合：每次上傳程式碼，系統就自動執行一輪測試。"
+    },
+    {
+      "term": "事後檢討",
+      "meaning": "事故處理完後，整理發生經過、原因和預防做法的文件。"
+    },
+    {
+      "term": "工單",
+      "meaning": "在專案管理系統裡，記錄和追蹤一項工作的單子。"
+    },
+    {
+      "term": "API",
+      "meaning": "讓不同程式互相溝通的介面，規定要怎麼請求、會得到什麼資料。"
+    },
+    {
+      "term": "本機測試",
+      "meaning": "在自己的電腦上先把程式跑起來測一遍，確認沒問題才送 review。"
+    },
+    {
+      "term": "開發環境",
+      "meaning": "給工程師部署、整合與再測試用的環境，和使用者用的系統分開。"
+    },
+    {
+      "term": "測試環境",
+      "meaning": "與正式環境分開、專門拿來試驗新功能的環境；有些公司和開發環境合用。"
+    },
+    {
+      "term": "正式環境",
+      "meaning": "使用者實際在用的系統。部署到這裡，就是上線。"
+    },
+    {
+      "term": "部署",
+      "meaning": "把程式放到伺服器上，讓它能實際運作。"
+    },
+    {
+      "term": "單元測試",
+      "meaning": "用小例子自動檢查一個函式的結果對不對，例如深夜下單，配送日應該是哪天。"
+    },
+    {
+      "term": "除錯",
+      "meaning": "找出程式錯誤的原因並修正，英文常叫 debug。"
+    },
+    {
+      "term": "UTC",
+      "meaning": "世界標準時間，全世界共用的時間基準。台灣時間比 UTC 快 8 小時（UTC+8）。"
+    },
+    {
+      "term": "時區",
+      "meaning": "各地依經度使用的當地時間。同一時刻，台北和倫敦的時鐘顯示不同。"
+    }
   ],
   "reflections": [
     "你比較享受一個人專注解開問題，還是跟人一起把事情推進？",
     "如果單純寫程式只占一天的 15%，其他時間你願意花在哪裡？"
   ],
-  "practitionerFeedback": []
+  "practitionerFeedback": [
+    {
+      "date": "2026-10-22",
+      "summary": "每天早上 5 分鐘 Scrum 站會；PM 開 ticket，工程師照 ticket 開發，要符合規範、寫單元測試、不破壞現有系統；本機測試後給主管 review，邏輯錯誤、效能不佳或測試不足會被退回；ticket 有期限，要經開發環境再測試後部署正式環境；午餐後沒會議就繼續開發；每月幾次技術分享會；也要 review 別人的 PR、處理不熟的 issue。"
+    }
+  ]
 }

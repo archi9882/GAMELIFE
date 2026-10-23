@@ -18,6 +18,13 @@
   --strip-bg: #1c1916;
   --strip-ink: #f1ebe3;
   --shadow: 0 10px 32px rgba(43, 37, 32, 0.22);
+  /* 除錯小遊戲的終端機卡片：兩種模式都是深底，所以顏色固定 */
+  --term-bg: #1c1916;
+  --term-ink: #f1ebe3;
+  --term-dim: #b9b0a4;
+  --term-up: #7fcf9d;
+  --term-warn: #e7b866;
+  --code-font: ui-monospace, SFMono-Regular, Menlo, Consolas, "Noto Sans Mono CJK TC", monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -236,6 +243,50 @@ body.layout-card .stage-label, body.layout-card .stage-actions, body.layout-card
 .inv-hint { font-size: 0.85rem; margin: 8px 0 0; }
 .inv-details { margin: 10px 0 0; padding-left: 1.1em; font-size: 0.9rem; }
 .inv-details li { margin-bottom: 6px; }
+.inv-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.inv-head .kicker { margin: 0; }
+.inv-pending {
+  font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--ink);
+}
+.inv-why { display: block; margin-top: 3px; padding-left: 8px; border-left: 3px solid var(--line); color: var(--ink); }
+.inv-tip { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--up-bg); font-size: 0.9rem; }
+
+/* 小遊戲：程式碼審查（每行一張卡，含行號；長的行自動換行，不橫向捲動） */
+.inv-code { display: grid; gap: 4px; }
+.inv-card.inv-review {
+  min-height: 44px; flex-direction: row; align-items: flex-start; justify-content: flex-start; gap: 8px;
+  padding: 6px 8px; border-width: 1px; border-radius: 8px; font-weight: 400; font-size: 0.85rem;
+}
+.inv-review .ln { flex: none; width: 1.6em; text-align: right; color: var(--muted); font-family: var(--code-font); user-select: none; }
+.inv-review code {
+  flex: 1; min-width: 0; font-family: var(--code-font); white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
+}
+.inv-review .inv-mark { flex: none; align-self: center; }
+.inv-review.yes { border-width: 2px; }
+
+/* 小遊戲：除錯（終端機風格的深色卡片與標籤） */
+.inv-card.inv-debug { background: var(--term-bg); color: var(--term-ink); border-color: var(--term-dim); }
+.inv-card.inv-debug.yes { background: var(--term-bg); border-color: var(--term-up); }
+.inv-card.inv-debug.no { background: var(--term-bg); border-color: var(--term-warn); color: var(--term-ink); }
+.inv-card.inv-debug:disabled:not(.yes):not(.no) { opacity: 1; color: var(--term-dim); border-color: var(--term-dim); }
+.inv-debug .inv-mark.yes { color: var(--term-up); }
+.inv-debug .inv-mark.no { color: var(--term-warn); }
+.inv-tag {
+  align-self: flex-start; font-size: 0.7rem; font-weight: 600; padding: 0 6px; border-radius: 4px;
+  border: 1px solid var(--term-dim); color: var(--term-dim); font-family: var(--code-font);
+}
+.inv-term {
+  display: block; margin: 4px 0 2px; padding: 6px 8px; border-radius: 6px; background: var(--term-bg); color: var(--term-ink);
+  font-family: var(--code-font); font-size: 0.82rem; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* 小遊戲：單元測試（勾選清單） */
+.inv-list { display: grid; gap: 6px; }
+.inv-card.inv-test { min-height: 44px; flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; }
+.inv-test .box { flex: none; font-size: 1.2rem; line-height: 1; }
+.inv-test .inv-label { flex: 1; min-width: 0; }
+.inv-test .inv-mark { flex: none; }
 
 /* 自由走動：方向鍵與「處理」按鈕 */
 .dpad {

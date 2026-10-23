@@ -61,6 +61,8 @@ export interface Interrupt {
   /** 被打斷的事件 id：該事件到了畫面上時出現 */
   during: string;
   caller: string;
+  /** 怎麼找上你：call＝來電（預設）、visit＝有人走過來 */
+  via?: "call" | "visit";
   title: string;
   body: string;
   choices: Choice[];
@@ -69,21 +71,39 @@ export interface Interrupt {
   requires?: string[];
 }
 
+/** 查資料的外觀（引擎判定相同）：資料卡、程式碼審查、除錯、單元測試 */
+export const INVESTIGATION_KINDS = ["info", "review", "debug", "test"] as const;
+export type InvestigationKind = (typeof INVESTIGATION_KINDS)[number];
+
+/** 除錯線索的標籤 */
+export const DEBUG_TAGS = ["錯誤訊息", "程式碼", "環境"] as const;
+export type DebugTag = (typeof DEBUG_TAGS)[number];
+
 /** 查資料小遊戲的一張資料卡 */
 export interface InvestigationItem {
   id: string;
-  /** 卡片標題（打開前就看得到） */
+  /** 卡片標題（打開前就看得到）；kind 為 review 時是一行程式碼 */
   label: string;
   /** 打開後的內容 */
   detail: string;
   /** 是否與任務有關；有關的卡都打開了才算查完 */
   relevant: boolean;
+  /** 打開後的白話說明：為什麼有關或無關（選填） */
+  why?: string;
+  /** 除錯線索的標籤（只用在 kind 為 debug） */
+  tag?: DebugTag;
 }
 
 /** 查資料：顯示選項前先從多張資料卡中找出有關的 */
 export interface Investigation {
   prompt: string;
   items: InvestigationItem[];
+  /** 外觀，預設 info */
+  kind?: InvestigationKind;
+  /** 查完後顯示的「小知識」 */
+  tip?: string;
+  /** 內容尚待從業者審查：面板顯示徽章 */
+  reviewPending?: boolean;
 }
 
 export interface GameEvent {
@@ -96,6 +116,8 @@ export interface GameEvent {
   tags: string[];
   sources: Source[];
   requires?: string[];
+  /** 這些旗標任一個已設定才出現（OR）；與 requires 同時使用時兩者都要符合 */
+  requiresAny?: string[];
   /** 3D 場景中的地點（Career.locations 的 id） */
   location?: string;
   /** 同一個 group 的事件（需相鄰、time 相同）會同時開放，由玩家決定處理順序 */
@@ -105,6 +127,28 @@ export interface GameEvent {
   /** 查資料：找齊有關的資料卡，才會出現選項 */
   investigate?: Investigation;
 }
+
+/** 群組時限：基本分鐘數，加上條件事件「這局有出現」時的加時 */
+export interface DeadlineSpec {
+  base: number;
+  /** { 事件 id: 加時分鐘 }：該事件這局有出現（前置旗標已符合）才加 */
+  extra?: Record<string, number>;
+}
+export type Deadline = number | DeadlineSpec;
+
+/** 把時限統一成 { base, extra } */
+export const deadlineSpec = (d: Deadline): { base: number; extra: Record<string, number> } =>
+  typeof d === "number" ? { base: d, extra: {} } : { base: d.base, extra: d.extra ?? {} };
+
+/** 事件這局是否會出現：requires 全部符合，且 requiresAny（若有）至少一個符合 */
+export function isAvailable(e: Pick<GameEvent, "requires" | "requiresAny">, flags: readonly string[]): boolean {
+  const all = (e.requires ?? []).every((f) => flags.includes(f));
+  const any = !e.requiresAny?.length || e.requiresAny.some((f) => flags.includes(f));
+  return all && any;
+}
+
+/** 事件是否為條件事件（有前置旗標） */
+export const isConditional = (e: GameEvent): boolean => !!(e.requires?.length || e.requiresAny?.length);
 
 export interface PractitionerFeedback {
   date: string;
@@ -123,8 +167,11 @@ export interface Career {
   reflections: string[];
   /** 對照畫面：落差最大的一類要顯示的說明（選填，v0.1 擴充） */
   categoryNotes?: Partial<Record<Category, string>>;
-  /** 群組時限（分鐘）：{ group id: 分鐘 }。有時限的群組，所有事件都要有 expire */
-  deadlines?: Record<string, number>;
+  /**
+   * 群組時限（分鐘）：{ group id: 分鐘 } 或 { group id: { base, extra: { 事件 id: 加時 } } }。
+   * 有時限的群組，所有事件都要有 expire。
+   */
+  deadlines?: Record<string, Deadline>;
   /** 打斷事件（來電、訊息） */
   interrupts?: Interrupt[];
   /** 首頁職業入口上的小標籤（例如「待優化」），選填 */
@@ -160,7 +207,7 @@ export const choiceMinutes = (c: Choice): number => BASE_MINUTES + Math.max(0, -
 
 export const LIMITS = {
   eventsMin: 8,
-  eventsMax: 12,
+  eventsMax: 14,
   bodyMax: 80,
   labelMax: 20,
   outcomeMax: 60,
@@ -174,7 +221,11 @@ export const LIMITS = {
   deadlineMax: 180,
   promptMax: 40,
   itemLabelMax: 12,
+  /** kind 為 review 時，label 是一行程式碼（含註解） */
+  codeLineMax: 60,
   itemDetailMax: 60,
+  whyMax: 60,
+  tipMax: 60,
   itemsMin: 4,
   itemsMax: 6,
   relevantMin: 2,
@@ -245,10 +296,18 @@ function checkInvestigation(inv: Investigation, w: string, errors: string[]): vo
   const relevant = items.filter((it) => it.relevant).length;
   if (relevant < LIMITS.relevantMin || relevant > LIMITS.relevantMax) errors.push(`${iw}: 有關的資料卡需 ${LIMITS.relevantMin}–${LIMITS.relevantMax} 張（目前 ${relevant}）`);
   if (new Set(items.map((it) => it.id)).size !== items.length) errors.push(`${iw}: 資料卡 id 重複`);
+  const kind = inv.kind ?? "info";
+  if (!INVESTIGATION_KINDS.includes(kind)) errors.push(`${iw}: kind 不合法 (${kind})`);
+  if (inv.tip !== undefined && (!inv.tip || charLen(inv.tip) > LIMITS.tipMax)) errors.push(`${iw}: tip 需 1–${LIMITS.tipMax} 字（${charLen(inv.tip ?? "")}）`);
+  if (inv.reviewPending !== undefined && typeof inv.reviewPending !== "boolean") errors.push(`${iw}: reviewPending 需為 true 或 false`);
+  const labelMax = kind === "review" ? LIMITS.codeLineMax : LIMITS.itemLabelMax;
   for (const it of items) {
     if (!it.id) errors.push(`${iw}: 資料卡缺 id`);
-    if (!it.label || charLen(it.label) > LIMITS.itemLabelMax) errors.push(`${iw}: 資料卡「${it.id}」label 需 1–${LIMITS.itemLabelMax} 字`);
-    if (!it.detail || charLen(it.detail) > LIMITS.itemDetailMax) errors.push(`${iw}: 資料卡「${it.id}」detail 需 1–${LIMITS.itemDetailMax} 字`);
+    if (!it.label || charLen(it.label) > labelMax) errors.push(`${iw}: 資料卡「${it.id}」label 需 1–${labelMax} 字（${charLen(it.label ?? "")}）`);
+    if (!it.detail || charLen(it.detail) > LIMITS.itemDetailMax) errors.push(`${iw}: 資料卡「${it.id}」detail 需 1–${LIMITS.itemDetailMax} 字（${charLen(it.detail ?? "")}）`);
+    if (it.why !== undefined && (!it.why || charLen(it.why) > LIMITS.whyMax)) errors.push(`${iw}: 資料卡「${it.id}」why 需 1–${LIMITS.whyMax} 字（${charLen(it.why ?? "")}）`);
+    if (it.tag !== undefined && kind !== "debug") errors.push(`${iw}: 資料卡「${it.id}」只有 debug 才能有 tag`);
+    if (it.tag !== undefined && !DEBUG_TAGS.includes(it.tag)) errors.push(`${iw}: 資料卡「${it.id}」tag 不合法 (${it.tag})`);
   }
 }
 
@@ -289,7 +348,9 @@ export function validateCareer(c: Career): string[] {
     c.intro,
     ...(c.interrupts ?? []).flatMap((i) => [i.title, i.body, ...(i.choices ?? []).flatMap((ch) => [ch.label, ch.outcome])]),
     ...events.map((e) => e.expire?.outcome ?? ""),
-    ...events.flatMap((e) => (e.investigate ? [e.investigate.prompt, ...(e.investigate.items ?? []).flatMap((it) => [it.label, it.detail])] : [])),
+    ...events.flatMap((e) =>
+      e.investigate ? [e.investigate.prompt, e.investigate.tip ?? "", ...(e.investigate.items ?? []).flatMap((it) => [it.label, it.detail, it.why ?? ""])] : [],
+    ),
     ...events.flatMap((e) => [e.title, e.body, ...(e.choices ?? []).flatMap((ch) => [ch.label, ch.outcome])]),
   ].join("\n");
   const seenTerms = new Set<string>();
@@ -349,6 +410,12 @@ export function validateCareer(c: Career): string[] {
     for (const f of e.requires ?? []) {
       if (!flagsSetBefore.has(f)) errors.push(`${w}: requires 的旗標 "${f}" 沒有被更早的選項設定`);
     }
+    if (e.requiresAny !== undefined) {
+      if (!Array.isArray(e.requiresAny) || e.requiresAny.length < 2) errors.push(`${w}: requiresAny 至少要 2 個旗標（只有 1 個請用 requires）`);
+      for (const f of e.requiresAny ?? []) {
+        if (!flagsSetBefore.has(f)) errors.push(`${w}: requiresAny 的旗標 "${f}" 沒有被更早的選項設定`);
+      }
+    }
 
     if (e.investigate) checkInvestigation(e.investigate, w, errors);
     const choices = e.choices ?? [];
@@ -362,6 +429,7 @@ export function validateCareer(c: Career): string[] {
     if (ids.has(i.id) || interruptIds.has(i.id)) errors.push(`${w}: id 與其他事件或打斷重複`);
     interruptIds.add(i.id);
     if (!events.some((e) => e.id === i.during)) errors.push(`${w}: during "${i.during}" 不是存在的事件`);
+    if (i.via !== undefined && i.via !== "call" && i.via !== "visit") errors.push(`${w}: via 需為 call 或 visit`);
     if (!i.caller || charLen(i.caller) > LIMITS.callerMax) errors.push(`${w}: caller 需 1–${LIMITS.callerMax} 字`);
     if (!i.title) errors.push(`${w}: title 必填`);
     if (charLen(i.body ?? "") > LIMITS.bodyMax) errors.push(`${w}: body 超過 ${LIMITS.bodyMax} 字（${charLen(i.body)}）`);
@@ -372,25 +440,52 @@ export function validateCareer(c: Career): string[] {
 
   // 倒數計時：時限、expire、平衡
   const deadlines = c.deadlines ?? {};
-  for (const [g, minutes] of Object.entries(deadlines)) {
+  for (const [g, raw] of Object.entries(deadlines)) {
     const w = at(`deadlines.${g}`);
     const members = events.filter((e) => e.group === g);
     if (members.length === 0) {
       errors.push(`${w}: 沒有任何事件屬於這個 group`);
       continue;
     }
-    if (!Number.isInteger(minutes) || minutes < LIMITS.deadlineMin || minutes > LIMITS.deadlineMax) errors.push(`${w}: 需為 ${LIMITS.deadlineMin}–${LIMITS.deadlineMax} 的整數分鐘`);
+    const isSpec = typeof raw === "object" && raw !== null;
+    if (!isSpec && typeof raw !== "number") {
+      errors.push(`${w}: 需為分鐘數或 { base, extra }`);
+      continue;
+    }
+    const { base, extra } = deadlineSpec(raw);
+    const okMinutes = (m: number) => Number.isInteger(m) && m >= LIMITS.deadlineMin && m <= LIMITS.deadlineMax;
+    for (const [id, add] of Object.entries(extra)) {
+      const target = members.find((e) => e.id === id);
+      if (!target) errors.push(`${w}: extra 的事件 "${id}" 不在這個 group`);
+      else if (!isConditional(target)) errors.push(`${w}: extra 的事件 "${id}" 不是條件事件（每局都會出現，請直接加進 base）`);
+      if (!Number.isInteger(add) || add <= 0) errors.push(`${w}: extra.${id} 需為正整數分鐘`);
+    }
     const cost = (e: GameEvent) => (e.choices ?? []).map(choiceMinutes);
     // 查資料：最少要打開所有有關的卡；最多全部打開
     const inspectMin = (e: GameEvent) => (e.investigate?.items ?? []).filter((it) => it.relevant).length * INSPECT_MINUTES;
     const inspectMax = (e: GameEvent) => (e.investigate?.items ?? []).length * INSPECT_MINUTES;
-    const minSum = members.reduce((a, e) => a + Math.min(...cost(e)) + inspectMin(e), 0);
-    const maxSum = members.reduce((a, e) => a + Math.max(...cost(e)) + inspectMax(e), 0);
-    // 移動只算同一群組內從一個地點走到另一個地點；同地點的事排在一起最省，所以最少要走（地點數 − 1）趟
-    const places = new Set(members.map((e) => e.location ?? ""));
-    const minTravel = TRAVEL_MINUTES * (places.size - 1);
-    if (minSum + minTravel > minutes) errors.push(`${w}: 太緊：最省時的選項加移動共需 ${minSum + minTravel} 分鐘，超過時限 ${minutes}（要有辦法做完）`);
-    if (maxSum + TRAVEL_MINUTES * (members.length - 1) <= minutes) errors.push(`${w}: 太鬆：最耗時的選項加移動最多 ${maxSum + TRAVEL_MINUTES * (members.length - 1)} 分鐘，沒超過時限 ${minutes}（要有壓力）`);
+    // 條件事件可能出現或不出現：每一種組合都要「做得完、有壓力」
+    const conditional = members.filter(isConditional);
+    if (conditional.length > 6) errors.push(`${w}: 條件事件太多（${conditional.length}），組合數過多`);
+    for (let mask = 0; mask < 1 << Math.min(conditional.length, 6); mask++) {
+      const present = members.filter((e) => !isConditional(e) || (mask >> conditional.indexOf(e)) & 1);
+      if (present.length === 0) continue;
+      const minutes = base + present.reduce((a, e) => a + (extra[e.id] ?? 0), 0);
+      const combo = conditional.length ? `（條件事件：${conditional.map((e) => `${e.id}${present.includes(e) ? "有" : "無"}`).join("、")}）` : "";
+      if (!okMinutes(minutes)) {
+        errors.push(`${w}: 需為 ${LIMITS.deadlineMin}–${LIMITS.deadlineMax} 的整數分鐘${combo}`);
+        continue;
+      }
+      const minSum = present.reduce((a, e) => a + Math.min(...cost(e)) + inspectMin(e), 0);
+      const maxSum = present.reduce((a, e) => a + Math.max(...cost(e)) + inspectMax(e), 0);
+      // 移動只算同一群組內從一個地點走到另一個地點；同地點的事排在一起最省，所以最少要走（地點數 − 1）趟
+      const places = new Set(present.map((e) => e.location ?? ""));
+      const minTravel = TRAVEL_MINUTES * (places.size - 1);
+      const maxTravel = TRAVEL_MINUTES * (present.length - 1);
+      if (minSum + minTravel > minutes) errors.push(`${w}: 太緊：最省時的選項加移動共需 ${minSum + minTravel} 分鐘，超過時限 ${minutes}（要有辦法做完）${combo}`);
+      // 只剩一件事時不會有事來不及，不檢查壓力
+      if (present.length >= 2 && maxSum + maxTravel <= minutes) errors.push(`${w}: 太鬆：最耗時的選項加移動最多 ${maxSum + maxTravel} 分鐘，沒超過時限 ${minutes}（要有壓力）${combo}`);
+    }
   }
   for (const e of events) {
     const w = at(`事件 ${e.id}`);

@@ -426,9 +426,74 @@ describe("查資料", () => {
     expect(investigationDone(teacher, newGame(teacher), e)).toBe(true);
   });
 
+  it("專業小遊戲沿用同一套規則：review 在有時限的群組扣 5 分鐘，除錯不在群組不扣", () => {
+    const review = toEvent(swe, "s-review");
+    expect(remainingMinutes(swe, review)).not.toBeNull();
+    expect(inspect(swe, review, "l3").used).toBe(review.used + INSPECT_MINUTES);
+    const debug = toEvent(swe, "s-deepwork");
+    expect(remainingMinutes(swe, debug)).toBeNull();
+    expect(inspect(swe, debug, "msg").used).toBe(debug.used);
+  });
+
   it("驗證器把最少查資料時間算進「做得完」", () => {
     const bad = structuredClone(teacher) as Career;
     bad.deadlines!["office-morning"] = 50; // 最省 45 分 + 查資料 15 分 = 60 > 50
     expect(validateCareer(bad).some((e) => e.includes("太緊"))).toBe(true);
+  });
+});
+
+describe("軟體工程師 ticket 主線", () => {
+  const swe = careers.find((c) => c.id === "swe")!;
+  /** 依 picks（事件 id → 選項）玩到傍晚群組開始，回傳狀態與走過的事件 */
+  const toEvening = (picks: Record<string, number>) => {
+    let s = submitPrediction(swe, newGame(swe), newGame(swe).prediction);
+    const order: string[] = [];
+    for (let guard = 0; guard < 300; guard++) {
+      if (!s.pendingOutcome && !s.expired?.length && swe.events[s.cursor]?.group === "evening") return { s, order };
+      const e = !s.pendingOutcome && !s.expired?.length ? currentEvent(swe, s) : null;
+      if (e && !currentInterrupt(swe, s)) order.push(e.id);
+      s = autoStep(swe, s, (id) => picks[id] ?? (swe.events.find((x) => x.id === id)!.choices.length - 1));
+    }
+    throw new Error("沒有走到傍晚");
+  };
+  const careful = { "s-standup": 0, "s-unittest": 0 };
+
+  it("寫單元測試每局都會出現，並帶著單元測試小遊戲", () => {
+    const e = swe.events.find((x) => x.id === "s-unittest")!;
+    expect(e.requires ?? e.requiresAny).toBeUndefined();
+    expect(e.investigate?.kind).toBe("test");
+    expect(toEvening(careful).order).toContain("s-unittest");
+  });
+
+  it("主管退回：開發先求能動或只測正常情況，任一個就會出現；兩個都沒選就不出現", () => {
+    expect(toEvening(careful).order).not.toContain("s-returned");
+    expect(toEvening({ "s-standup": 1, "s-unittest": 0 }).order).toContain("s-returned");
+    expect(toEvening({ "s-standup": 0, "s-unittest": 1 }).order).toContain("s-returned");
+    expect(toEvening({ "s-standup": 1, "s-unittest": 1 }).order).toContain("s-returned");
+  });
+
+  it("傍晚時限 = 基本值 + 測試環境出錯有出現時的加時", () => {
+    const spec = swe.deadlines!.evening as { base: number; extra: Record<string, number> };
+    const noBug = toEvening({ ...careful, "s-review": 0 }).s;
+    expect(noBug.flags).not.toContain("rubber_stamp");
+    expect(openEvents(swe, noBug).map((e) => e.id)).not.toContain("s-bug-found");
+    expect(remainingMinutes(swe, noBug)).toBe(spec.base);
+    const bug = toEvening({ ...careful, "s-review": 2 }).s;
+    expect(openEvents(swe, bug).map((e) => e.id)).toContain("s-bug-found");
+    expect(remainingMinutes(swe, bug)).toBe(spec.base + spec.extra["s-bug-found"]);
+  });
+
+  it("條件時限用最省時的選項可以全部做完（有無測試環境出錯皆然）", () => {
+    for (const review of [0, 2]) {
+      let s = toEvening({ ...careful, "s-review": review }).s;
+      const cheapest = (id: string) => {
+        const ch = swe.events.find((e) => e.id === id)!.choices.map(choiceMinutes);
+        return ch.indexOf(Math.min(...ch));
+      };
+      // 同地點的先做完，再走去新人座位
+      const order = openEvents(swe, s).map((e) => e.id).sort((a, b) => (a === "s-mentor" ? 1 : b === "s-mentor" ? -1 : 0));
+      for (const id of order) s = advance(swe, choose(swe, selectEvent(swe, s, id), cheapest(id)));
+      expect(s.expired).toBeNull();
+    }
   });
 });
