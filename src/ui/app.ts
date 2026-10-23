@@ -41,6 +41,7 @@ import { mergeSeen, progress, type Codex } from "../engine/codex";
 import { splitPages } from "../engine/text";
 import { allocationIsEstimate, buildProfile, compareAllocation } from "../engine/scoring";
 import { createScene, hasScene, sceneCast, type SceneHandle } from "../scene";
+import { fitTaskRect, type PxRect } from "../scene/fp";
 import { drawCard } from "./card";
 import { load, loadAutoWalk, loadCodex, loadName, NAME_MAX, save, saveAutoWalk, saveCodex, saveName } from "./storage";
 
@@ -158,15 +159,16 @@ function setState(s: GameState | null): void {
 }
 
 export function mount(el: HTMLElement): void {
+  // 「全螢幕」按鈕放在 #ui 之後（不在 #stage 裡），第一人稱的 HUD 蓋在場景上時按鈕仍在最上層
   el.innerHTML = `<div id="stage" hidden><div id="stage-canvas"></div><span id="stage-label" class="stage-label"></span>
-    <button type="button" id="fs-toggle" class="fs-toggle" aria-pressed="false">全螢幕</button>
     <div id="stage-actions" class="stage-actions"></div>
     <div id="dpad" class="dpad" role="group" aria-label="移動" hidden>
       <button type="button" class="dpad-btn" data-dir="up" aria-label="上">▲</button>
       <button type="button" class="dpad-btn" data-dir="left" aria-label="左">◀</button>
       <button type="button" class="dpad-btn" data-dir="right" aria-label="右">▶</button>
       <button type="button" class="dpad-btn" data-dir="down" aria-label="下">▼</button>
-    </div></div><div id="ui"></div>`;
+    </div></div><div id="ui"></div>
+    <button type="button" id="fs-toggle" class="fs-toggle" aria-pressed="false">全螢幕</button>`;
   stageEl = el.querySelector("#stage")!;
   stageHost = el.querySelector("#stage-canvas")!;
   stageLabel = el.querySelector("#stage-label")!;
@@ -175,7 +177,10 @@ export function mount(el: HTMLElement): void {
   bindDpad();
   bindFullscreen(el.querySelector<HTMLButtonElement>("#fs-toggle")!);
   root = el.querySelector("#ui")!;
-  window.addEventListener("resize", applyInsets);
+  window.addEventListener("resize", () => {
+    applyInsets();
+    placeTaskScreen();
+  });
   codex = loadCodex();
   playerName = loadName();
   autoWalk = loadAutoWalk();
@@ -257,6 +262,51 @@ function setWalkUi(on: boolean): void {
   }
 }
 
+/** 第一人稱：左右方向鍵轉頭（不能走動）；在輸入框裡不攔截 */
+const turnHeld = { left: false, right: false };
+function pushTurn(): void {
+  scene?.setTurn((turnHeld.right ? 1 : 0) - (turnHeld.left ? 1 : 0));
+}
+function onTurnKey(ev: KeyboardEvent): void {
+  const side = ev.key === "ArrowLeft" ? "left" : ev.key === "ArrowRight" ? "right" : null;
+  const t = ev.target as HTMLElement | null;
+  if (!side || ev.ctrlKey || ev.metaKey || ev.altKey || (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  const down = ev.type === "keydown";
+  if (down) ev.preventDefault();
+  turnHeld[side] = down;
+  pushTurn();
+}
+function clearTurn(): void {
+  turnHeld.left = turnHeld.right = false;
+  pushTurn();
+}
+let lookUi = false;
+/** 開關第一人稱的鍵盤轉頭 */
+function setLookUi(on: boolean): void {
+  if (on === lookUi) return;
+  lookUi = on;
+  if (on) {
+    window.addEventListener("keydown", onTurnKey);
+    window.addEventListener("keyup", onTurnKey);
+    window.addEventListener("blur", clearTurn);
+  } else {
+    window.removeEventListener("keydown", onTurnKey);
+    window.removeEventListener("keyup", onTurnKey);
+    window.removeEventListener("blur", clearTurn);
+    clearTurn();
+  }
+}
+
+/** 第一人稱：漸黑傳送到事件的地點，到了再顯示事件（「帶我去」與場景上的「處理：○○」共用） */
+function travelTo(career: Career, eventId: string, location: string): void {
+  if (!scene || walking) return;
+  walking = true;
+  void scene.fadeTo(location, { eventId }).then(() => {
+    walking = false;
+    if (state?.phase === "play" && currentEvent(career, state)?.id === eventId) render();
+  });
+}
+
 // ── 版面：場景常駐背景＋浮動卡片 ─────────────────────
 // 場景一直鋪滿畫面（position: fixed）。選單、預測、對照、結算是「卡片」版面：場景霧化、鏡頭慢慢環繞，
 // 卡片在桌機靠左、手機在中央偏下，頁面可捲動。遊玩是「面板」版面：場景清楚可走動，
@@ -276,6 +326,14 @@ const DESKTOP_PANEL_EDGE = 552;
 /** 依版面告訴場景哪裡被蓋住，讓鏡頭把角色放在看得到的範圍 */
 function applyInsets(): void {
   if (!scene) return;
+  if (rpg) {
+    // 第一人稱文字 RPG：上方 HUD、下方對話框蓋住的高度（量實際的元素）
+    const r = rpgRegion();
+    root.style.setProperty("--hud-h", `${Math.round(r.y)}px`);
+    root.style.setProperty("--dlg-h", `${Math.round(window.innerHeight - r.y - r.h)}px`);
+    scene.setInsets({ top: Math.round(r.y), bottom: Math.round(window.innerHeight - r.y - r.h), left: 0 });
+    return;
+  }
   if (isDesktop()) scene.setInsets({ left: DESKTOP_PANEL_EDGE, bottom: 0 });
   else if (layout === "play") scene.setInsets({ bottom: Math.round(window.innerHeight * 0.46), left: 0 });
   else scene.setInsets({ bottom: Math.round(window.innerHeight * 0.6), left: 0 });
@@ -284,7 +342,9 @@ function applyInsets(): void {
 function setLayout(next: Layout): void {
   layout = next;
   const hasStage = !stageEl.hidden;
-  document.body.classList.toggle("layout-play", next === "play" && hasStage);
+  if (next !== "play" || !hasStage) setRpg(false);
+  document.body.classList.toggle("layout-play", next === "play" && hasStage && !rpg);
+  document.body.classList.toggle("layout-rpg", next === "play" && hasStage && rpg);
   document.body.classList.toggle("layout-card", !(next === "play" && hasStage));
   document.body.classList.toggle("has-scene", hasStage);
   applyInsets();
@@ -304,6 +364,7 @@ function bindFullscreen(btn: HTMLButtonElement): void {
     btn.hidden = true;
     return;
   }
+  document.body.classList.add("fs-ok"); // HUD 右上角留位置給全螢幕按鈕
   btn.addEventListener("click", () => {
     try {
       if (document.fullscreenElement) document.exitFullscreen?.().catch(() => undefined);
@@ -326,7 +387,9 @@ function exitFullscreen(): void {
 
 function disposeScene(): void {
   walking = false;
+  setRpg(false);
   setWalkUi(false);
+  setLookUi(false);
   scene?.dispose();
   scene = null;
   sceneCareerId = null;
@@ -355,6 +418,7 @@ function ensureScene(careerId: string, mode: "home" | "game"): SceneHandle | nul
 /** 卡片畫面的背景：同一個職業的場景，霧化＋展示模式；沒有場景時退回純卡片 */
 function showBackdrop(career: Career, mode: "home" | "game", progress: number): void {
   setWalkUi(false);
+  setLookUi(false);
   stageActions.replaceChildren();
   stageLabel.textContent = "";
   exitFullscreen();
@@ -378,12 +442,20 @@ function updateStage(career: Career, s: GameState, e: GameEvent | null, walk = t
   stageEl.hidden = !scene;
   if (!scene) {
     setWalkUi(false);
+    setLookUi(false);
     stageActions.replaceChildren();
     setLayout("card");
     return;
   }
   setLayout("play");
   scene.setShowcase(false);
+  // 軟體工程師：遊玩時第一人稱（從展示畫面進來時先漸黑）
+  const fp = scene.hasFirstPerson();
+  if (fp) scene.setViewMode("first");
+  setLookUi(fp);
+  // 第一人稱：文字 RPG 版面（場景鋪滿、上方 HUD、下方對話框）
+  setRpg(fp && scene.viewMode() === "first");
+  setLayout("play");
   const open = openEvents(career, s);
   const shown = new Set(open.map((o) => o.id));
   if (e) shown.add(e.id);
@@ -403,7 +475,9 @@ function updateStage(career: Career, s: GameState, e: GameEvent | null, walk = t
     [...byPlace].map(([id, list]) => ({ id, name: placeName(id), count: list.length })),
     e ? undefined : (placeId) => {
       const target = byPlace.get(placeId)?.[0];
-      if (target && state) setState(selectEvent(career, state, target.id));
+      if (!target || !state) return;
+      if (rpg) pickQuest(career, target);
+      else setState(selectEvent(career, state, target.id));
     },
   );
   // 自由走動：只在選事件（任務板）與前往途中開放；事件內容顯示時不能走開
@@ -412,18 +486,34 @@ function updateStage(career: Career, s: GameState, e: GameEvent | null, walk = t
   scene.onNearbyChange(() => {
     if (state?.phase === "play") render();
   });
+  // 第一人稱：事件就在這裡時，鏡頭轉向事件的人或物件
+  if (fp && e?.location && scene.at(e.location)) void scene.fadeTo(e.location, { eventId: e.id });
   // 任務板：走到有待辦的地點附近，場景右下角出現「處理：○○」
   stageActions.replaceChildren();
-  if (!e && canMove) {
+  // 文字 RPG 版面：待辦清單在對話框裡，不另外放「處理：○○」按鈕
+  if (!e && (canMove || fp) && !rpg) {
     const near = new Set(scene.nearby());
-    const here = open.filter((o) => o.location && near.has(o.location));
+    // 第一人稱：不能走動，所以別處的事也列出來（這裡的排前面），按了就漸黑傳送過去
+    const here = fp
+      ? walking
+        ? []
+        : [...open.filter((o) => o.location && near.has(o.location)), ...open.filter((o) => o.location && !near.has(o.location))]
+      : open.filter((o) => o.location && near.has(o.location));
     for (const o of here.slice(0, 2)) {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "stage-action";
       b.textContent = `處理：${o.title}`;
       b.addEventListener("click", () => {
-        if (state) setState(selectEvent(career, state, o.id));
+        if (!state || walking) return;
+        const elsewhere = fp && !!o.location && !near.has(o.location);
+        if (elsewhere) walking = true; // 先標記，避免「之後自動帶我去」重複觸發
+        setState(selectEvent(career, state, o.id));
+        if (elsewhere && scene) {
+          walking = false;
+          travelTo(career, o.id, o.location!);
+          render();
+        }
       });
       stageActions.appendChild(b);
     }
@@ -489,7 +579,9 @@ function renderHome(): void {
   const p = progress(codex, careers);
   const walkHint = !scene
     ? ""
-    : scene.canWalk()
+    : scene.hasFirstPerson()
+      ? `<p class="muted home-hint">第一人稱視角：拖曳畫面（或按左右方向鍵）環顧四周，用「帶我去」移動</p>`
+      : scene.canWalk()
       ? `<p class="muted home-hint">走動：方向鍵、WASD 或點地板</p>`
       : `<p class="muted home-hint">這個場景用「帶我去」移動</p>`;
   root.innerHTML = `
@@ -697,6 +789,7 @@ function renderPlay(career: Career, s: GameState): void {
     return renderQuestBoard(career, s, open);
   }
   updateStage(career, s, e);
+  if (rpg) return renderRpgEvent(career, s, e);
   const head = `${backButton()}${timelineHtml(career, s, `${timeLabel(career, s, e.time)}・${CATEGORY_LABELS[e.category]}`)}${statsHtml(s)}`;
   if (!s.pendingOutcome && scene && e.location && !scene.at(e.location)) return renderTravel(career, s, e, head);
   const itr = currentInterrupt(career, s);
@@ -776,6 +869,404 @@ function renderPlay(career: Career, s: GameState): void {
   });
   bindBack();
   bindTerms();
+}
+
+// ── 第一人稱文字 RPG 版面（v0.12，軟體工程師遊玩時）────────────
+// 場景鋪滿畫面；上方 HUD（時鐘、倒數、徽章、三個小條、回到選單；全螢幕按鈕在右上角，HUD 留位置），
+// 下方半透明深色對話框（名牌＝說話者、內文分頁、回應列表）。小遊戲與查資料顯示在場景裡的螢幕上：
+// 鏡頭推近座位的電腦螢幕，任務介面是對齊螢幕投影位置的 DOM 疊層；做完（選了選項）鏡頭拉回。
+
+/** 文字 RPG 版面是否開啟（遊玩畫面 + 第一人稱） */
+let rpg = false;
+/** 目前要推近的螢幕、推近是否完成、螢幕投影在畫面上的矩形 */
+let wantScreen: string | null = null;
+let focusReady = false;
+let taskRect: PxRect | null = null;
+
+function setRpg(on: boolean): void {
+  if (on === rpg) return;
+  rpg = on;
+  if (on) {
+    window.addEventListener("keydown", onRpgKey);
+    scene?.onScreenRect((r) => {
+      taskRect = r;
+      placeTaskScreen();
+    });
+  } else {
+    window.removeEventListener("keydown", onRpgKey);
+    scene?.onScreenRect(undefined);
+    wantScreen = null;
+    focusReady = false;
+    taskRect = null;
+    root?.style.removeProperty("--hud-h");
+    root?.style.removeProperty("--dlg-h");
+  }
+}
+
+/** 可見範圍：HUD 下緣到對話框上緣（視窗座標） */
+function rpgRegion(): PxRect {
+  const hud = root.querySelector(".hud")?.getBoundingClientRect();
+  const dlg = root.querySelector(".dlg")?.getBoundingClientRect();
+  const top = hud ? hud.bottom : 0;
+  const bottom = dlg ? dlg.top : window.innerHeight;
+  return { x: 0, y: top, w: window.innerWidth, h: Math.max(0, bottom - top) };
+}
+
+/** 推近（或拉回）螢幕；同一個螢幕不重複推近 */
+function syncScreen(want: string | null): void {
+  if (!scene) return;
+  if (want === wantScreen) return placeTaskScreen();
+  wantScreen = want;
+  focusReady = false;
+  taskRect = null;
+  const mine = want;
+  void scene.focusScreen(want).then(() => {
+    if (wantScreen !== mine) return;
+    focusReady = true;
+    placeTaskScreen();
+  });
+}
+
+/**
+ * 把螢幕上的任務疊層放到螢幕投影的位置（與可見範圍的交集）；推近還沒完成時先隱藏。
+ * 投影不在畫面上時放在可見範圍中央；會議室的投影片疊層是裝飾，對不準時就不顯示。
+ */
+function placeTaskScreen(): void {
+  if (!rpg) return;
+  const el = root.querySelector<HTMLElement>(".task-screen[data-bind]");
+  if (!el) return;
+  if (!focusReady) {
+    el.style.visibility = "hidden";
+    el.dataset.fit = "pending";
+    return;
+  }
+  const { rect, fit } = fitTaskRect(taskRect, rpgRegion());
+  const decorative = el.classList.contains("slide");
+  el.style.left = `${rect.x.toFixed(1)}px`;
+  el.style.top = `${rect.y.toFixed(1)}px`;
+  el.style.width = `${rect.w.toFixed(1)}px`;
+  el.style.height = `${rect.h.toFixed(1)}px`;
+  el.style.visibility = decorative && fit === "fallback" ? "hidden" : "visible";
+  el.dataset.fit = fit;
+}
+
+/** 選一件待辦：就在這裡直接顯示；在別的地點就漸黑傳送過去 */
+function pickQuest(career: Career, o: GameEvent): void {
+  if (!state || walking) return;
+  const elsewhere = !!scene && !!o.location && !scene.at(o.location);
+  if (elsewhere) walking = true; // 先標記，避免「之後自動帶我去」重複觸發
+  setState(selectEvent(career, state, o.id));
+  if (elsewhere) {
+    walking = false;
+    travelTo(career, o.id, o.location!);
+    render();
+  }
+}
+
+/** 鍵盤：Enter／空白鍵 = 繼續（或「帶我去」），數字鍵 1–9 選回應、待辦或螢幕上的卡片；焦點在按鈕上時交給瀏覽器 */
+function onRpgKey(ev: KeyboardEvent): void {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
+  const t = ev.target as HTMLElement | null;
+  if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+  const onControl = !!t && t !== document.body && !!t.closest("button, a, summary, label");
+  if (ev.key === "Enter" || ev.key === " ") {
+    if (onControl || ev.repeat) return;
+    const btn = root.querySelector<HTMLButtonElement>("#page-next, #next, #ack-expired, #go-there:not([disabled])");
+    if (btn) {
+      ev.preventDefault();
+      btn.click();
+    }
+    return;
+  }
+  if (/^[1-9]$/.test(ev.key) && !ev.repeat) {
+    const list = [...root.querySelectorAll<HTMLButtonElement>(".dlg .choice, .dlg .quest")];
+    const pool = list.length ? list : [...root.querySelectorAll<HTMLButtonElement>(".task-screen .inv-card")];
+    const b = pool[Number(ev.key) - 1];
+    if (b && !b.disabled) {
+      ev.preventDefault();
+      b.click();
+    }
+  }
+}
+
+const keyHint = (i: number): string => (i < 9 ? `<span class="k" aria-hidden="true">${i + 1}</span>` : "");
+
+/** 上方 HUD：回到選單、時鐘與地點、倒數、徽章、三個小條、一天的進度 */
+function hudHtml(career: Career, s: GameState, now: string): string {
+  const p = Math.round(timelineProgress(career, s) * 100);
+  const badge = currentBadge(career, s.flags);
+  const chip = badge ? `<span class="badge ${badge.tone}">${esc(badge.label)}</span>` : "";
+  return `<header class="hud">
+    <div class="hud-top">
+      <button class="link hud-back" id="back">← 回到選單</button>
+      <p class="now">${esc(now)}${timerChip(career, s)}${chip}</p>
+    </div>
+    ${statsHtml(s)}
+    <div class="hud-day" role="progressbar" aria-label="一天的進度 ${esc(career.dayStart)}–${esc(career.dayEnd)}" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100"><div style="width:${p}%"></div></div>
+  </header>`;
+}
+
+/** 下方對話框：有說話者時顯示名牌（沒有就是旁白，不顯示名牌） */
+function dlgHtml(speaker: string | undefined, body: string): string {
+  return `<section class="dlg${speaker ? " has-name" : ""}" aria-label="${speaker ? `${esc(speaker)}說` : "對話框"}">
+    ${speaker ? `<p class="dlg-name">${esc(speaker)}</p>` : ""}
+    <div class="dlg-scroll">${body}</div>
+  </section>`;
+}
+
+/** 回應列表（▸ 選項），數字鍵對應順序 */
+function choiceListHtml(labels: string[]): string {
+  return `<div class="choices" role="group" aria-label="你的回應">${labels
+    .map((l, i) => `<button class="choice" data-i="${i}">${keyHint(i)}<span class="choice-label">${esc(l)}</span></button>`)
+    .join("")}</div>`;
+}
+
+function rpgScreen(career: Career, s: GameState, now: string, parts: { overlay?: string; dlg: string }): void {
+  root.innerHTML = `<main class="screen play rpg">${hudHtml(career, s, now)}${parts.overlay ?? ""}${parts.dlg}</main>`;
+  applyInsets();
+  placeTaskScreen();
+  bindBack();
+  bindTerms();
+}
+
+const placeOf = (career: Career, id: string | undefined): string | undefined => career.locations?.find((l) => l.id === id)?.name;
+
+/** 事件（前往、打斷、結果、內文分頁、查資料、回應）的文字 RPG 畫面 */
+function renderRpgEvent(career: Career, s: GameState, e: GameEvent): void {
+  const now = `${timeLabel(career, s, e.time)}・${placeOf(career, e.location) ?? CATEGORY_LABELS[e.category]}`;
+  // 前往別的地點：對話框顯示「下一步」，按「帶我去」（或 Enter）漸黑過去
+  if (!s.pendingOutcome && scene && e.location && !scene.at(e.location)) {
+    syncScreen(null);
+    const place = placeOf(career, e.location) ?? "下一個地點";
+    rpgScreen(career, s, now, {
+      dlg: dlgHtml(
+        undefined,
+        `<article class="guide">
+          <p class="kicker">下一步</p>
+          <h2>前往：${esc(place)}</h2>
+          <p class="muted">${esc(e.time)}・${CATEGORY_LABELS[e.category]}，有事情需要你處理。</p>
+          ${walking ? `<p class="dlg-wait" role="status">前往${esc(place)}…</p>` : `<button class="primary" id="go-there">帶我去</button>`}
+          <label class="auto-walk"><input type="checkbox" id="auto-walk" ${autoWalk ? "checked" : ""} /> 之後自動帶我去</label>
+        </article>`,
+      ),
+    });
+    const go = (): void => {
+      if (walking || !scene) return;
+      travelTo(career, e.id, e.location!);
+      if (walking) render();
+    };
+    root.querySelector("#go-there")?.addEventListener("click", go);
+    root.querySelector<HTMLInputElement>("#auto-walk")!.addEventListener("change", (ev) => {
+      autoWalk = (ev.target as HTMLInputElement).checked;
+      saveAutoWalk(autoWalk);
+      if (autoWalk) go();
+    });
+    if (autoWalk && !walking) go();
+    return;
+  }
+  const itr = currentInterrupt(career, s);
+  if (itr) return renderRpgInterrupt(career, s, itr, now);
+  if (s.pendingOutcome) {
+    syncScreen(null);
+    const ch = e.choices[s.pendingOutcome.choiceIndex];
+    rpgScreen(career, s, now, {
+      dlg: dlgHtml(
+        e.speaker,
+        `<article class="card">
+          <p class="kicker">你選了：${esc(ch.label)}</p>
+          <p class="outcome">${annotate(ch.outcome, career)}</p>
+          <div class="deltas">${deltaHtml(ch.effects)}</div>
+        </article>
+        <button class="primary" id="next">繼續</button>
+        ${glossFor(career, [ch.label, ch.outcome])}`,
+      ),
+    });
+    root.querySelector("#next")!.addEventListener("click", () => setState(advance(career, s)));
+    return;
+  }
+  // 內文分頁；已經開始查資料的事件（例如重新整理後）直接回到最後一頁
+  if (bodyPage.eventId !== e.id) {
+    const started = s.inspected.some((k) => k.startsWith(`${e.id}:`));
+    bodyPage = { eventId: e.id, index: started ? splitPages(e.body).length - 1 : 0 };
+  }
+  const pages = splitPages(e.body);
+  const last = bodyPage.index >= pages.length - 1;
+  const inv = e.investigate;
+  const investigating = last && !!inv && !investigationDone(career, s, e);
+  const showChoices = last && !investigating;
+  const opened = inv ? inv.items.filter((it) => s.inspected.includes(`${e.id}:${it.id}`)) : [];
+  // 畫面內任務：在座位查資料 → 推近電腦螢幕；技術分享會 → 會議室大螢幕；其他地點的查資料 → 上方的文件疊層
+  const screen = scene?.screenFor(e.location, e.id, last && !!inv) ?? null;
+  syncScreen(screen);
+  let overlay = "";
+  if (last && inv) {
+    const panel = investigationHtml(career, s, e, inv, investigating);
+    overlay = screen
+      ? `<div class="task-screen monitor" data-bind data-screen="${esc(screen)}" style="visibility:hidden">${panel}</div>`
+      : `<div class="task-screen doc">${panel}</div>`;
+  } else if (screen) {
+    overlay = `<div class="task-screen slide" data-bind data-screen="${esc(screen)}" aria-hidden="true" style="visibility:hidden">
+      <p class="slide-kicker">${esc(placeOf(career, e.location) ?? "")}・${esc(e.time)}</p>
+      <p class="slide-title">${esc(e.title)}</p>
+      <p class="slide-sub">${CATEGORY_LABELS[e.category]}</p>
+    </div>`;
+  }
+  // 查資料時，對話框跟著說明最新打開的那一張（完整內容留在螢幕上）
+  const t = inv ? KIND_TEXT[inv.kind ?? "info"] : null;
+  const latestKey = [...s.inspected].reverse().find((k) => k.startsWith(`${e.id}:`));
+  const latest = inv && latestKey ? inv.items.find((it) => `${e.id}:${it.id}` === latestKey) : undefined;
+  const found = inv ? opened.filter((it) => it.relevant).length : 0;
+  const total = inv ? inv.items.filter((it) => it.relevant).length : 0;
+  const latestHtml =
+    latest && t
+      ? `<p class="dlg-find"><strong>${inv!.kind === "review" ? `第 ${inv!.items.indexOf(latest) + 1} 行` : annotate(latest.label, career)}</strong>：<span class="inv-mark ${latest.relevant ? "yes" : "no"}">${latest.relevant ? t.yes : t.no}</span>${latest.why ? ` ${annotate(latest.why, career)}` : ""}</p>`
+      : "";
+  const where = screen ? "螢幕上" : "上方";
+  const taskHint =
+    last && inv && t
+      ? investigating
+        ? `<p class="dlg-task">在${where}找出 ${total} ${esc(t.unit)}（已找到 ${found}）。${deadlineOf(career, s) !== null ? `${t.each}花 ${INSPECT_MINUTES} 分鐘。` : ""}</p>`
+        : `<p class="dlg-task done">都找到了（${found} / ${total}）。要怎麼做？</p>`
+      : "";
+  const visible = [
+    e.title,
+    pages[bodyPage.index],
+    ...(last && inv
+      ? [
+          inv.prompt,
+          ...(inv.kind === "review" ? [] : inv.items.map((it) => it.label)),
+          ...opened.flatMap((it) => [it.detail, it.why ?? ""]),
+          !investigating ? (inv.tip ?? "") : "",
+        ]
+      : []),
+    ...(showChoices ? e.choices.map((c) => c.label) : []),
+  ];
+  rpgScreen(career, s, now, {
+    overlay,
+    dlg: dlgHtml(
+      e.speaker,
+      `<h2>${annotate(e.title, career)}</h2>
+      <p>${annotate(pages[bodyPage.index], career)}</p>
+      ${last ? "" : `<div class="pager"><span class="muted">${bodyPage.index + 1} / ${pages.length}</span><button class="primary" id="page-next">繼續</button></div>`}
+      ${taskHint}${latestHtml}
+      ${showChoices ? choiceListHtml(e.choices.map((c) => c.label)) : ""}
+      ${glossFor(career, visible)}
+      <details class="src"><summary>這個情境的依據</summary>${sourcesHtml(e.sources)}</details>`,
+    ),
+  });
+  root.querySelectorAll<HTMLButtonElement>(".choice").forEach((b) => b.addEventListener("click", () => setState(choose(career, s, Number(b.dataset.i)))));
+  root.querySelectorAll<HTMLButtonElement>(".inv-card").forEach((b) => b.addEventListener("click", () => setState(inspect(career, s, b.dataset.id!))));
+  root.querySelector("#page-next")?.addEventListener("click", () => {
+    bodyPage = { eventId: e.id, index: bodyPage.index + 1 };
+    render();
+  });
+  // 查完資料、回應列表剛出現：捲到看得到回應
+  if (showChoices && inv && opened.length) root.querySelector(".dlg .choices")?.scrollIntoView({ block: "nearest" });
+}
+
+/** 打斷：來電是畫面上方的手機來電卡（回應在對話框），有人走過來是對話框（名牌是來的人） */
+function renderRpgInterrupt(career: Career, s: GameState, itr: Interrupt, now: string): void {
+  syncScreen(null);
+  const visit = itr.via === "visit";
+  const po = s.pendingOutcome;
+  const outcome = po?.interrupt ? itr.choices[po.choiceIndex] : null;
+  let overlay = "";
+  if (!visit) {
+    overlay = outcome
+      ? `<article class="card call phone done" aria-label="通話結束">
+          <p class="kicker">通話結束・${esc(itr.caller)}</p>
+        </article>`
+      : `<article class="card call phone" role="alertdialog" aria-label="來電：${esc(itr.caller)}">
+          <p class="kicker"><span class="ring" aria-hidden="true"></span>來電</p>
+          <p class="phone-caller">${esc(itr.caller)}</p>
+          <h2>${annotate(itr.title, career)}</h2>
+          <p>${annotate(itr.body, career)}</p>
+        </article>`;
+  }
+  let body: string;
+  if (outcome) {
+    body = `<article class="card${visit ? " call done" : ""}">
+        <p class="kicker">你選了：${esc(outcome.label)}</p>
+        <p class="outcome">${annotate(outcome.outcome, career)}</p>
+        <div class="deltas">${deltaHtml(outcome.effects)}</div>
+      </article>
+      <button class="primary" id="next">繼續</button>
+      ${glossFor(career, [outcome.label, outcome.outcome])}`;
+  } else {
+    const head = visit
+      ? `<article class="card call visit">
+          <p class="kicker">有人找你・${esc(itr.caller)}</p>
+          <h2>${annotate(itr.title, career)}</h2>
+          <p>${annotate(itr.body, career)}</p>
+        </article>`
+      : `<p class="muted">電話響了，對方在等你回答。</p>`;
+    body = `${head}${choiceListHtml(itr.choices.map((c) => c.label))}
+      ${glossFor(career, [itr.title, itr.body, ...itr.choices.map((c) => c.label)])}
+      <details class="src"><summary>這個情境的依據</summary>${sourcesHtml(itr.sources)}</details>`;
+  }
+  rpgScreen(career, s, now, { overlay, dlg: dlgHtml(itr.caller, body) });
+  root.querySelector("#next")?.addEventListener("click", () => setState(advance(career, s)));
+  root.querySelectorAll<HTMLButtonElement>(".choice").forEach((b) => b.addEventListener("click", () => setState(chooseInterrupt(career, s, Number(b.dataset.i)))));
+}
+
+/** 今天要處理的事：同時有好幾件時，對話框列出清單；別的地點的事標上地點，按下去就漸黑過去 */
+function renderRpgBoard(career: Career, s: GameState, open: GameEvent[]): void {
+  syncScreen(null);
+  const timed = deadlineOf(career, s) !== null;
+  rpgScreen(career, s, `${timeLabel(career, s, open[0].time)}・${open.length} 件待辦`, {
+    dlg: dlgHtml(
+      undefined,
+      `<article class="guide">
+        <p class="kicker">同時有 ${open.length} 件事</p>
+        <h2>今天要處理的事</h2>
+        <div class="quests">
+          ${open
+            .map((o, i) => {
+              const here = !!scene && !!o.location && scene.at(o.location);
+              const place = placeOf(career, o.location);
+              return `<button class="quest" data-id="${esc(o.id)}">
+                ${keyHint(i)}<span class="q-mark" aria-hidden="true">！</span>
+                <span class="q-main"><strong>${esc(o.title)}</strong><span class="muted">${CATEGORY_LABELS[o.category]}</span></span>
+                ${place ? `<span class="q-place${here ? " here" : ""}">${here ? "這裡" : `→ ${esc(place)}`}</span>` : ""}
+              </button>`;
+            })
+            .join("")}
+        </div>
+        <p class="muted">順序由你決定，也可以點場景裡的「！」。別的地點的事，按下去就會過去${timed ? "（換地點多花 5 分鐘）" : ""}。</p>
+      </article>`,
+    ),
+  });
+  root.querySelectorAll<HTMLButtonElement>(".quest").forEach((b) =>
+    b.addEventListener("click", () => {
+      const o = open.find((x) => x.id === b.dataset.id);
+      if (o) pickQuest(career, o);
+    }),
+  );
+}
+
+/** 時間到：對話框逐件說明來不及的後果 */
+function renderRpgExpired(career: Career, s: GameState): void {
+  syncScreen(null);
+  const items = (s.expired ?? []).map((id) => career.events.find((e) => e.id === id)).filter((e): e is GameEvent => !!e);
+  rpgScreen(career, s, `${timeLabel(career, s, items[0]?.time ?? "")}・時間到`, {
+    dlg: dlgHtml(
+      undefined,
+      `<p class="kicker">時間到</p>
+      <h2>有 ${items.length} 件事來不及</h2>
+      <p class="muted">同時有太多事，沒辦法每件都處理。</p>
+      ${items
+        .map(
+          (e) => `<article class="card expired">
+            <h3>${esc(e.title)}</h3>
+            <p>${esc(e.expire?.outcome ?? "")}</p>
+            <div class="deltas">${deltaHtml(e.expire?.effects ?? {})}</div>
+          </article>`,
+        )
+        .join("")}
+      <button class="primary" id="ack-expired">繼續</button>`,
+    ),
+  });
+  root.querySelector("#ack-expired")!.addEventListener("click", () => setState(ackExpired(s)));
 }
 
 /** 各種查資料外觀的用字：面板標題、進度單位、打開後的標示、扣時間提示 */
@@ -879,6 +1370,7 @@ function renderInterrupt(career: Career, s: GameState, itr: Interrupt, head: str
 /** 時間到：其餘還開著的事件來不及處理，逐件說明後果 */
 function renderExpired(career: Career, s: GameState): void {
   if (s.phase === "play") updateStage(career, s, null, false);
+  if (rpg && s.phase === "play") return renderRpgExpired(career, s);
   const items = (s.expired ?? []).map((id) => career.events.find((e) => e.id === id)).filter((e): e is GameEvent => !!e);
   root.innerHTML = `
     <main class="screen play">
@@ -905,6 +1397,7 @@ function renderExpired(career: Career, s: GameState): void {
 /** 同時有好幾件待辦：由玩家決定先做哪一件 */
 function renderQuestBoard(career: Career, s: GameState, open: GameEvent[]): void {
   updateStage(career, s, null);
+  if (rpg) return renderRpgBoard(career, s, open);
   const placeName = (id: string | undefined) => career.locations?.find((l) => l.id === id)?.name;
   const head = `${backButton()}${timelineHtml(career, s, `${timeLabel(career, s, open[0].time)}・${open.length} 件待辦`)}${statsHtml(s)}`;
   root.innerHTML = `
@@ -943,7 +1436,7 @@ function renderTravel(career: Career, s: GameState, e: GameEvent, head: string):
         <p class="kicker">下一步</p>
         <h2>前往：${esc(place)}</h2>
         <p class="muted">${esc(e.time)}・${CATEGORY_LABELS[e.category]}，有事情需要你處理。看場景裡的「！」標記。</p>
-        <button class="primary" id="go-there" ${walking ? "disabled" : ""}>${walking ? "走過去中…" : "帶我去"}</button>
+        <button class="primary" id="go-there" ${walking ? "disabled" : ""}>${walking ? (scene?.viewMode() === "first" ? "前往中…" : "走過去中…") : "帶我去"}</button>
         ${scene?.canWalk() ? `<p class="muted walk-hint">也可以自己走過去（點地板或用方向鍵）</p>` : ""}
         <label class="auto-walk"><input type="checkbox" id="auto-walk" ${autoWalk ? "checked" : ""} /> 之後自動帶我去</label>
       </article>
@@ -951,6 +1444,11 @@ function renderTravel(career: Career, s: GameState, e: GameEvent, head: string):
   bindBack();
   const go = (): void => {
     if (walking || !scene) return;
+    if (scene.viewMode() === "first") {
+      travelTo(career, e.id, e.location!);
+      if (walking) render();
+      return;
+    }
     walking = true;
     scene.goTo(e.location!, () => {
       walking = false;

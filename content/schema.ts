@@ -126,6 +126,8 @@ export interface GameEvent {
   expire?: Expire;
   /** 查資料：找齊有關的資料卡，才會出現選項 */
   investigate?: Investigation;
+  /** 說話的人（例如「產品經理」）：第一人稱對話框的名牌；沒填時以旁白呈現（不顯示名牌） */
+  speaker?: string;
 }
 
 /** 群組時限：基本分鐘數，加上條件事件「這局有出現」時的加時 */
@@ -217,6 +219,8 @@ export const LIMITS = {
   badgeMax: 10,
   entryTagMax: 6,
   callerMax: 12,
+  /** 事件說話者（對話框名牌）的字數上限 */
+  speakerMax: 12,
   deadlineMin: 15,
   deadlineMax: 180,
   promptMax: 40,
@@ -417,6 +421,9 @@ export function validateCareer(c: Career): string[] {
       }
     }
 
+    if (e.speaker !== undefined && (typeof e.speaker !== "string" || !e.speaker.trim() || charLen(e.speaker) > LIMITS.speakerMax)) {
+      errors.push(`${w}: speaker 需 1–${LIMITS.speakerMax} 字（${typeof e.speaker === "string" ? charLen(e.speaker) : "不是文字"}）`);
+    }
     if (e.investigate) checkInvestigation(e.investigate, w, errors);
     const choices = e.choices ?? [];
     checkChoices(choices, w, errors);

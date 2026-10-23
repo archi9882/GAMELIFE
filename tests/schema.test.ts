@@ -330,4 +330,38 @@ describe("劇本格式驗證", () => {
       expect(validateCareer(c)).toEqual([]);
     });
   });
+
+  describe("說話者 speaker（v0.12 對話框名牌）", () => {
+    const swe = () => structuredClone(careers.find((c) => c.id === "swe")!) as Career;
+
+    it("選填：沒有 speaker 的事件仍通過驗證", () => {
+      const c = swe();
+      for (const e of c.events) delete e.speaker;
+      expect(validateCareer(c)).toEqual([]);
+    });
+
+    it("空白、只有空格、過長或不是文字都會被擋下", () => {
+      for (const bad of ["", "   ", "字".repeat(LIMITS.speakerMax + 1), 42 as unknown as string]) {
+        const c = swe();
+        c.events[0].speaker = bad;
+        expect(validateCareer(c).some((e) => e.includes("s-standup") && e.includes("speaker")), String(bad)).toBe(true);
+      }
+      const ok = swe();
+      ok.events[0].speaker = "字".repeat(LIMITS.speakerMax);
+      expect(validateCareer(ok)).toEqual([]);
+    });
+
+    it("軟體工程師：有人說話的事件標上說話者，旁白事件不填", () => {
+      const c = careers.find((x) => x.id === "swe")!;
+      const by = Object.fromEntries(c.events.map((e) => [e.id, e.speaker]));
+      expect(by["s-scope"]).toBe("產品經理");
+      expect(by["s-returned"]).toBe("主管");
+      expect(by["s-postmortem"]).toBe("主管");
+      expect(by["s-mentor"]).toBe("新人");
+      expect(by["s-review"]).toBe("同事");
+      // 小遊戲與等待類事件是旁白（對話框不顯示名牌）
+      for (const id of ["s-alert", "s-unittest", "s-deepwork", "s-ci"]) expect(by[id], id).toBeUndefined();
+      for (const e of c.events) if (e.speaker !== undefined) expect(e.speaker.length).toBeGreaterThan(0);
+    });
+  });
 });

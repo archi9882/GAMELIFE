@@ -192,6 +192,7 @@
       "id": "s-postmortem",
       "time": "11:00",
       "location": "desk",
+      "speaker": "主管",
       "group": "late-morning",
       "expire": {
         "effects": {
@@ -244,6 +245,7 @@
       "id": "s-review",
       "time": "11:00",
       "location": "desk",
+      "speaker": "同事",
       "group": "late-morning",
       "expire": {
         "effects": {
@@ -360,7 +362,7 @@
     {
       "id": "s-techshare",
       "time": "12:40",
-      "location": "pantry",
+      "location": "meeting",
       "group": "noon",
       "expire": {
         "effects": {
@@ -410,6 +412,7 @@
       "id": "s-scope",
       "time": "12:40",
       "location": "meeting",
+      "speaker": "產品經理",
       "group": "noon",
       "expire": {
         "effects": {
@@ -654,6 +657,7 @@
       "id": "s-returned",
       "time": "15:00",
       "location": "desk",
+      "speaker": "主管",
       "category": "core",
       "requiresAny": [
         "rushed_dev",
@@ -868,6 +872,7 @@
       "id": "s-mentor",
       "time": "16:30",
       "location": "newbie",
+      "speaker": "新人",
       "group": "evening",
       "expire": {
         "effects": {
